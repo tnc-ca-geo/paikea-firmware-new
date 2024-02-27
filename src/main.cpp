@@ -1,13 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <tca95xx.h>
 
-// see https://learn.adafruit.com/adafruit-tca9548a-1-to-8-i2c-multiplexer-breakout/arduino-wiring-and-test
-void tcaselect(uint8_t i) {
-  if (i > 7) return;
-  Wire.beginTransmission(0x24);
-  Wire.write(1 << i);
-  Wire.endTransmission();
-}
 
 /* Pin mapping
 ===  ========   === ======
@@ -62,27 +56,24 @@ uint config_values[8] = {
 };
 
 
+Expander expander=Expander();
+
+
 void setup() {
   Wire.begin();
   Serial.begin(115200);
-
-  for (uint i=0; i<8; i++) {
-    Wire.beginTransmission(0x24);
-    Wire.write(i);
-    Wire.write(config_values[i]);
-    Wire.endTransmission();
-  }
+  delay(100);
+  expander.begin(0x24);
+  // Arduino keywords INPUT and OUTPUT don't work here
+  expander.pinMode(10, EXPANDER_OUTPUT);
+  expander.pinMode(3, EXPANDER_INPUT);
 }
 
+
 void loop() {
-  Wire.beginTransmission(0x24);
-  Wire.write(3);
-  Wire.write(0b00000000);
-  Wire.endTransmission();
-  delay(1000);
-  Wire.beginTransmission(0x24);
-  Wire.write(3);
-  Wire.write(0b00000001);
-  Wire.endTransmission();
-  delay(1000);
+  expander.digitalWrite(10, 1);
+  delay(300);
+  Serial.print("BUTTON "); Serial.println(expander.digitalRead(3));
+  expander.digitalWrite(10, 0);
+  delay(300);
 }
