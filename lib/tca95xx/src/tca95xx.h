@@ -8,6 +8,8 @@
 #include <Wire.h>
 #include <tuple>
 
+#define EXPANDER_OUTPUT 0
+#define EXPANDER_INPUT 1
 
 const uint8_t TCA95_DEFAULTS[8] = {
   0b00000000,  // Input register level port 0 (read only)
@@ -21,8 +23,8 @@ const uint8_t TCA95_DEFAULTS[8] = {
   0b11111111,  // IO direction 1 ... input, 0 ... output port 0
   0b11111111   // IO direction 1 ... input, 0 ... output port 1
 };
-const uint8_t EXPANDER_OUTPUT = 0;
-const uint8_t EXPANDER_INPUT = 1;
+// const uint8_t EXPANDER_OUTPUT = 0;
+// const uint8_t EXPANDER_INPUT = 1;
 
 
 class Expander {
@@ -35,9 +37,10 @@ private:
     // modify single value in a TC95xx register
     void modify(uint8_t addr, uint8_t pos, bool value);
     uint8_t read(uint8_t addr);
+    TwoWire* wire;
 
 public:
-    Expander();
+    Expander(TwoWire& i2c);
     // configure Expander with an I2C address, the offset is used to not
     // conflict with MC pins
     void begin(uint8_t i2c_address);

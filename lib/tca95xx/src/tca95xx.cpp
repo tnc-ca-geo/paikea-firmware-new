@@ -1,7 +1,9 @@
 #include "tca95xx.h"
 
 
-Expander::Expander() {};
+Expander::Expander(TwoWire& i2c) {
+    wire = &i2c;
+}
 
 // for use of tuple see here
 // https://stackoverflow.com/questions/321068/returning-multiple-values-from-a-c-function
@@ -20,13 +22,13 @@ uint8_t Expander::set_bit(uint8_t old_byte, uint8_t pos, bool value) {
 };
 
 uint8_t Expander::read(uint8_t addr) {
-    Wire.beginTransmission(this->address);
-    Wire.write(addr);
+    wire->beginTransmission(this->address);
+    wire->write(addr);
     // This seems to be necessary.
-    Wire.endTransmission();
-    Wire.requestFrom(this->address, 1);
-    uint8_t value = Wire.read();
-    Wire.endTransmission();
+    wire->endTransmission();
+    wire->requestFrom(this->address, 1);
+    uint8_t value = wire->read();
+    wire->endTransmission();
     return value;
 };
 
@@ -34,15 +36,14 @@ uint8_t Expander::read(uint8_t addr) {
 void Expander::modify(uint8_t addr, uint8_t pos, bool value) {
     uint8_t current_value = this->read(addr);
     uint8_t new_value = set_bit(current_value, pos, value);
-    Wire.beginTransmission(this->address);
-    Wire.write(addr);
-    Wire.write(new_value);
-    Wire.endTransmission();
+    wire->beginTransmission(this->address);
+    wire->write(addr);
+    wire->write(new_value);
+    wire->endTransmission();
 };
 
-void Expander::begin(uint8_t i2_address) {
-    this->address = i2_address;
-    Wire.begin();
+void Expander::begin(uint8_t i2c_address) {
+    this->address = i2c_address;
     this->init();
 }
 
@@ -50,10 +51,10 @@ void Expander::begin(uint8_t i2_address) {
 void Expander::init() {
 
   for (uint8_t i=0; i<8; i++) {
-    Wire.beginTransmission(this->address);
-    Wire.write(i);
-    Wire.write(TCA95_DEFAULTS[i]);
-    Wire.endTransmission();
+    wire->beginTransmission(this->address);
+    wire->write(i);
+    wire->write(TCA95_DEFAULTS[i]);
+    wire->endTransmission();
   }
 }
 
