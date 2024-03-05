@@ -24,13 +24,14 @@ time_t Gps::time_to_epoch(TinyGPSDate date, TinyGPSTime time) {
 }
 
 void Gps::loop() {
-    this->readln(this->read_buffer);
-    while(gps_serial.available()) {
-        gps_parser.encode(gps_serial.read());
-    }
+    // this->readln(this->read_buffer);
+    while(gps_serial.available()) { gps_parser.encode(gps_serial.read()); }
     if (gps_parser.date.isValid() && gps_parser.time.isValid()) {
         this->gps_read_system_time = esp_timer_get_time();
         this->epoch = this->time_to_epoch(gps_parser.date, gps_parser.time);
+        this->valid = gps_parser.date.isUpdated();
+    } else {
+        this->valid = false;
     }
 }
 

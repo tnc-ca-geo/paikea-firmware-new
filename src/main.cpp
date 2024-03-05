@@ -3,6 +3,10 @@
 #include <tca95xx.h>
 #include <gps.h>
 #include <display.h>
+// we are using this to measure uptime for now but we probably need to create
+// a config object later
+#include <Preferences.h>
+
 
 #define PORT_EXPANDER_I2C_ADDRESS 0x24
 #define GPS_RX_PIN 35
@@ -66,28 +70,39 @@ uint8_t config_values[] = {
 };
 
 // Use to protect I2C
-static SemaphoreHandle_t mutex;
+static SemaphoreHandle_t mutex_i2c;
+// Use to protect the state object
+static SemaphoreHandle_t mutex_state;
 
-Gps gps=Gps();
-// see https://randomnerdtutorials.com/esp32-i2c-communication-arduino-ide/#:~:text=To%20use%20the%20two%20I2C%20bus%20interfaces%20of%20the%20ESP32,to%20create%20two%20TwoWire%20instances.&text=Then%2C%20initialize%20I2C%20communication%20on,pins%20with%20a%20defined%20frequency.&text=Then%2C%20you%20can%20use%20the,with%20the%20I2C%20bus%20interfaces.
-// TwoWire I2Cone = TwoWire(0);
-// TwoWire I2Ctwo = TwoWire(1);
+// Use preferences for debugging
+// TODO: remove for production
+Preferences preferences;
+
+// Initialize Hardware
+// Port Expander using i2c
 Expander expander=Expander(Wire);
+// GPS using UART
+Gps gps=Gps();
+// Display using i2c, for development only.
 LilyGoDisplay display=LilyGoDisplay(Wire);
 
-
+// store state
 struct state {
   time_t real_time;
+  time_t uptime;
+  time_t prior_uptime;
 } state;
 
-/*
- * My first freeRTOS task
- */
-void Task_test(void *pvParameters) {
-  for(;;) {
-    Serial.println("Running task");
-    vTaskDelay( pdMS_TO_TICKS( 5000 ) );
-  }
+
+void Task_store_uptime(void *pvParameters) {
+    for (;;) {
+      preferences.begin("debug", false);
+      preferences.putUInt("uptime", esp_timer_get_time()/1000000);
+      preferences.end();
+      // We really need to do this only once a minute to make sure to not to
+      // write to often to EEPROM
+      vTaskDelay( pdMS_TO_TICKS( 60000 ) );
+    }
 }
 
 /*
@@ -95,17 +110,18 @@ void Task_test(void *pvParameters) {
  * a mutex here since we are using the I2C bus shared with the display.
  */
 void Task_blink(void *pvParamaters) {
-
+  bool blink_state = HIGH;
   for(;;) {
-    xSemaphoreTake(mutex, 200);
-    expander.digitalWrite(10, 1);
-    xSemaphoreGive(mutex);
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
-    xSemaphoreTake(mutex, 200);
-    expander.digitalWrite(10, 0);
-    xSemaphoreGive(mutex);
+    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+      expander.digitalWrite(10, blink_state);
+      xSemaphoreGive(mutex_i2c);
+    } else {
+      Serial.println("missed blink");
+    }
+    blink_state = !blink_state;
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
+
 }
 
 // sync RTC with GPS
@@ -113,9 +129,15 @@ void Task_time_sync(void *pvParameters) {
   uint32_t sync_time;
   for(;;) {
     sync_time = (esp_timer_get_time() - gps.gps_read_system_time)/1000;
-    Serial.print("Sync time in ms: "); Serial.println(sync_time);
-    state.real_time = gps.epoch;
-    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+    // Serial.print("Sync time in ms: "); Serial.println(sync_time);
+    if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+      // sync_time is typically below a second, but I am putting this hear
+      // just in case it gets busy
+      state.real_time = gps.epoch + sync_time/1000;
+      state.uptime = esp_timer_get_time()/1000000;
+    xSemaphoreGive(mutex_state);
+    }
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -123,6 +145,11 @@ void Task_time_sync(void *pvParameters) {
 void Task_gps(void *pvParameters) {
    for(;;) {
     gps.loop();
+    if (gps.valid) {
+      Serial.println("GPS is valid!");
+    } else {
+      Serial.println("Waiting for GPS");
+    }
     vTaskDelay( pdMS_TO_TICKS( 500 ) );
   }
 }
@@ -132,15 +159,20 @@ void Task_gps(void *pvParameters) {
  * using the I2C bus.
  */
 void Task_display(void *pvParameters) {
-  uint32_t number = 0;
-  char* time_string = new char[255];
+  uint8_t size = 0;
+  char time_string[255] = {0};
   for(;;) {
-    sprintf(time_string, "%d", number);
-    xSemaphoreTake(mutex, portMAX_DELAY);
-    display.set(time_string);
-    xSemaphoreGive(mutex);
-    number++;
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+      sprintf(
+        time_string, "%d\nup %d\n   %d", state.real_time, state.uptime,
+        state.prior_uptime);
+      xSemaphoreGive(mutex_state);
+    }
+    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+      display.set(time_string);
+      xSemaphoreGive(mutex_i2c);
+    }
+    vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
 
@@ -148,27 +180,37 @@ void setup() {
   // Serial is shared
   // TODO: wrap it in some debug code
   Serial.begin(115200);
-  // I2Cone.begin(21, 22);
   Wire.begin();
-  // I2Ctwo.begin(21, 22);
-  mutex = xSemaphoreCreateMutex();
-  delay(100);
-  // TODO: move address to library since we don't really gave a choice here
+  // this is for debugging.
+  preferences.begin("debug", false);
+  // load the last up time into state
+  state.prior_uptime = preferences.getUInt("uptime", 0);
+  preferences.end();
+  // a mutex managing the use of the shared I2C bus
+  mutex_i2c = xSemaphoreCreateMutex();
+  // a mutex managing access to the state object
+  mutex_state = xSemaphoreCreateMutex();
+  // TODO: move address to library since we don't really have a choice here
+  // Init display and expander, both relay on Wire.
   expander.begin(PORT_EXPANDER_I2C_ADDRESS);
+  display.begin();
   // Init GPS
   gps.begin(GPS_RX_PIN, GPS_TX_PIN);
-  // Init display and expander, both relay on Wire.
-  display.begin();
-  // Arduino keywords INPUT and OUTPUT don't work here
-  expander.pinMode(3, EXPANDER_INPUT);
+  // Arduino keywords INPUT and OUTPUT don't work here since they associate
+  // different values
+  // expander.pinMode(3, EXPANDER_INPUT);
+  // configure blink
+  expander.pinMode(10, EXPANDER_OUTPUT);
+  // enable GPS
   expander.pinMode(0, EXPANDER_OUTPUT);
   expander.digitalWrite(0, HIGH);
 
-  xTaskCreate(&Task_test, "Task test", 4096, NULL, 3, NULL);
+  // create simple tasks (for now)
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 1, NULL);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 2, NULL);
   xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 2, NULL);
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 1, NULL);
+  xTaskCreate(&Task_store_uptime, "Task store up time", 4096, NULL, 1, NULL);
 }
 
 void loop() {}

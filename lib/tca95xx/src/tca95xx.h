@@ -26,6 +26,9 @@ const uint8_t TCA95_DEFAULTS[8] = {
 // const uint8_t EXPANDER_OUTPUT = 0;
 // const uint8_t EXPANDER_INPUT = 1;
 
+// This seems to be a good way to test whether we have power on the bus
+// https://forum.arduino.cc/t/i2c-is-it-possible-to-catch-error-no-bus-or-no-slave/456662
+
 
 class Expander {
 
