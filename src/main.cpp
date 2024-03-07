@@ -1,16 +1,20 @@
+// libraries
 #include <Arduino.h>
+#include <Preferences.h>
 #include <Wire.h>
+// my libraries
 #include <tca95xx.h>
 #include <gps.h>
 #include <display.h>
-// we are using this to measure uptime for now but we probably need to create
-// a config object later
-#include <Preferences.h>
+// project
+#include "helpers.h"
 
 
 #define PORT_EXPANDER_I2C_ADDRESS 0x24
 #define GPS_RX_PIN 35
 #define GPS_TX_PIN 12
+#define NUM_TIMERS 1
+#define uS_TO_S_FACTOR 1000000
 
 #define USE_DISPLAY 1
 
@@ -73,6 +77,8 @@ uint8_t config_values[] = {
 static SemaphoreHandle_t mutex_i2c;
 // Use to protect the state object
 static SemaphoreHandle_t mutex_state;
+// create TimerHandles
+static TimerHandle_t xTimers[ NUM_TIMERS ];
 
 // Use preferences for debugging
 // TODO: remove for production
@@ -89,10 +95,10 @@ LilyGoDisplay display=LilyGoDisplay(Wire);
 // store state
 struct state {
   time_t real_time;
-  time_t uptime;
   time_t prior_uptime;
 } state;
-
+// state variables that should survive deep sleep, store in RTC memory
+RTC_DATA_ATTR int uptime = 0;
 
 void Task_store_uptime(void *pvParameters) {
     for (;;) {
@@ -134,7 +140,7 @@ void Task_time_sync(void *pvParameters) {
       // sync_time is typically below a second, but I am putting this hear
       // just in case it gets busy
       state.real_time = gps.epoch + sync_time/1000;
-      state.uptime = esp_timer_get_time()/1000000;
+      uptime = esp_timer_get_time()/1000000;
     xSemaphoreGive(mutex_state);
     }
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
@@ -160,21 +166,31 @@ void Task_gps(void *pvParameters) {
  */
 void Task_display(void *pvParameters) {
   uint8_t size = 0;
-  char time_string[255] = {0};
+  char out_string[255] = {0};
+  char time_string[20] = {0};
   for(;;) {
     if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+      strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
       sprintf(
-        time_string, "%d\nup %d\n   %d", state.real_time, state.uptime,
+        out_string, "%s\nup %7d\nlst %6d", time_string, uptime,
         state.prior_uptime);
       xSemaphoreGive(mutex_state);
     }
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-      display.set(time_string);
+      display.set(out_string);
       xSemaphoreGive(mutex_i2c);
     }
     vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
+
+void vTimerCallback(TimerHandle_t xtimer) {
+    Serial.println("Start sleep sequence");
+    // this is not part of freeRTOS so we need to make sure everything is safe
+    // before we go here
+    // esp_sleep_enable_timer_wakeup(60 * uS_TO_S_FACTOR);
+    // esp_deep_sleep_start();
+  }
 
 void setup() {
   // Serial is shared
@@ -205,12 +221,17 @@ void setup() {
   expander.pinMode(0, EXPANDER_OUTPUT);
   expander.digitalWrite(0, HIGH);
 
+
   // create simple tasks (for now)
-  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 1, NULL);
-  xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 2, NULL);
-  xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 2, NULL);
-  xTaskCreate(&Task_display, "Task display", 4096, NULL, 1, NULL);
+  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, NULL);
+  xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 5, NULL);
+  xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10, NULL);
+  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
   xTaskCreate(&Task_store_uptime, "Task store up time", 4096, NULL, 1, NULL);
+  // create timer
+  xTimers[0] = xTimerCreate(
+    "A timer", pdMS_TO_TICKS( 10000 ), pdTRUE, 0, vTimerCallback);
+  xTimerStart(xTimers[0], 0);
 }
 
 void loop() {}
