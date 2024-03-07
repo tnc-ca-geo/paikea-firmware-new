@@ -19,7 +19,6 @@ const uint8_t TCA95_DEFAULTS[8] = {
   0b11111111,  // Output register level port 1
   0b00000000,  // Pin polarity port 0
   0b00000000,  // Pin polarity port 1
-  // this is paikea specific, TODO: generalize
   0b11111111,  // IO direction 1 ... input, 0 ... output port 0
   0b11111111   // IO direction 1 ... input, 0 ... output port 1
 };

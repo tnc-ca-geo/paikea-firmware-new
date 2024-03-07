@@ -23,6 +23,8 @@ class LilyGoDisplay {
     public:
         LilyGoDisplay(TwoWire& i2c);
         void begin();
+        // do whatever needed for sleep mode
+        void off();
         void loop();
         void set(char *bfr);
 

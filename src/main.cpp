@@ -79,6 +79,13 @@ static SemaphoreHandle_t mutex_i2c;
 static SemaphoreHandle_t mutex_state;
 // create TimerHandles
 static TimerHandle_t xTimers[ NUM_TIMERS ];
+// create TaskhHandles
+static TaskHandle_t blinkTaskHandle = NULL;
+static TaskHandle_t displayTaskHandle = NULL;
+static TaskHandle_t gpsTaskHandle = NULL;
+static TaskHandle_t timeSyncTaskHandle = NULL;
+static TaskHandle_t storeUpTimeTaskHandle = NULL;
+static TaskHandle_t waitForSleepTaskHandle = NULL;
 
 // Use preferences for debugging
 // TODO: remove for production
@@ -86,16 +93,23 @@ Preferences preferences;
 
 // Initialize Hardware
 // Port Expander using i2c
-Expander expander=Expander(Wire);
+Expander expander = Expander(Wire);
 // GPS using UART
-Gps gps=Gps();
+Gps gps = Gps();
 // Display using i2c, for development only.
-LilyGoDisplay display=LilyGoDisplay(Wire);
+LilyGoDisplay display = LilyGoDisplay(Wire);
 
 // store state
 struct state {
   time_t real_time;
   time_t prior_uptime;
+  // we inform all components to go to sleep gracefully and then check whether
+  // they are ready
+  bool go_to_sleep;
+  bool gps_sleep_ready;
+  bool blink_sleep_ready;
+  bool expander_sleep_ready;
+  bool display_sleep_ready;
 } state;
 // state variables that should survive deep sleep, store in RTC memory
 RTC_DATA_ATTR int uptime = 0;
@@ -112,30 +126,39 @@ void Task_store_uptime(void *pvParameters) {
 }
 
 /*
- * Blink LED 10. This is a useful indicator for the system running. We are need
+ * Blink LED 10. This is a useful indicator for the system running. We need
  * a mutex here since we are using the I2C bus shared with the display.
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   for(;;) {
-    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-      expander.digitalWrite(10, blink_state);
-      xSemaphoreGive(mutex_i2c);
+    // blink state seems to be reversed; make sure we deregister when LED off
+    if (state.go_to_sleep && blink_state) {
+      state.blink_sleep_ready = true;
+      // deregister blink task
+      vTaskDelete( blinkTaskHandle );
     } else {
-      Serial.println("missed blink");
+      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        expander.digitalWrite(10, blink_state);
+        xSemaphoreGive(mutex_i2c);
+      } else {
+        Serial.println("missed blink");
+      }
+      blink_state = !blink_state;
     }
-    blink_state = !blink_state;
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 
 }
 
-// sync RTC with GPS
+/*
+ * This task synchronizes the system time with the GPS and re-establishes real
+ * time after sleep.
+ */
 void Task_time_sync(void *pvParameters) {
   uint32_t sync_time;
   for(;;) {
     sync_time = (esp_timer_get_time() - gps.gps_read_system_time)/1000;
-    // Serial.print("Sync time in ms: "); Serial.println(sync_time);
     if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
       // sync_time is typically below a second, but I am putting this hear
       // just in case it gets busy
@@ -150,11 +173,21 @@ void Task_time_sync(void *pvParameters) {
 // run GPS
 void Task_gps(void *pvParameters) {
    for(;;) {
-    gps.loop();
-    if (gps.valid) {
-      Serial.println("GPS is valid!");
+    if (state.go_to_sleep) {
+      // disable GPS
+      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        expander.digitalWrite(0, LOW);
+        state.gps_sleep_ready = true;
+        xSemaphoreGive(mutex_i2c);
+        vTaskDelete( gpsTaskHandle );
+      }
     } else {
-      Serial.println("Waiting for GPS");
+      gps.loop();
+      if (gps.valid) {
+        Serial.println("GPS is valid!");
+      } else {
+        Serial.println("Waiting for GPS");
+      }
     }
     vTaskDelay( pdMS_TO_TICKS( 500 ) );
   }
@@ -169,23 +202,68 @@ void Task_display(void *pvParameters) {
   char out_string[255] = {0};
   char time_string[20] = {0};
   for(;;) {
-    if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-      strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
-      sprintf(
-        out_string, "%s\nup %7d\nlst %6d", time_string, uptime,
-        state.prior_uptime);
-      xSemaphoreGive(mutex_state);
-    }
-    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-      display.set(out_string);
-      xSemaphoreGive(mutex_i2c);
+    if (state.go_to_sleep) {
+      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        display.off();
+        state.display_sleep_ready = true;
+        xSemaphoreGive(mutex_i2c);
+        vTaskDelete( displayTaskHandle );
+      }
+    } else {
+      if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+        strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
+        sprintf(
+          out_string, "%s\nup %7d\nlst %6d", time_string, uptime,
+          state.prior_uptime);
+        xSemaphoreGive(mutex_state);
+      }
+      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        display.set(out_string);
+        xSemaphoreGive(mutex_i2c);
+      }
     }
     vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
 
+/*
+ * Waiting for all peripherials to be in a sleep ready state
+ */
+void Task_wait_for_sleep(void *pvParameters) {
+  esp_sleep_enable_timer_wakeup(60 * uS_TO_S_FACTOR);
+  char bfr[255];
+  for (;;) {
+    sprintf(
+      bfr, "Sleep ready state %d: blink %d, display %d, gps %d\n",
+      state.go_to_sleep, state.blink_sleep_ready, state.display_sleep_ready,
+      state.gps_sleep_ready);
+    Serial.print(bfr);
+    bool sleep_ready = state.blink_sleep_ready && state.display_sleep_ready &&
+      state.gps_sleep_ready;
+    if (sleep_ready) {
+      Serial.println("Going to sleep");
+      // sets all expander pins to input to conserve power
+      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        expander.init();
+        xSemaphoreGive(mutex_i2c);
+      }
+      esp_deep_sleep_start();
+    }
+    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+  }
+}
+
+/*
+ * Since our real workflow (taking a certain time) is not implemented yet
+ * we are using a timer to go to deep sleep.
+ */
 void vTimerCallback(TimerHandle_t xtimer) {
     Serial.println("Start sleep sequence");
+    state.go_to_sleep = true;
+    if (!waitForSleepTaskHandle) {
+      xTaskCreate(&Task_wait_for_sleep, "Check Sleep ready", 2048, NULL, 10,
+        &waitForSleepTaskHandle);
+    }
     // this is not part of freeRTOS so we need to make sure everything is safe
     // before we go here
     // esp_sleep_enable_timer_wakeup(60 * uS_TO_S_FACTOR);
@@ -221,13 +299,14 @@ void setup() {
   expander.pinMode(0, EXPANDER_OUTPUT);
   expander.digitalWrite(0, HIGH);
 
-
   // create simple tasks (for now)
-  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, NULL);
-  xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 5, NULL);
-  xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10, NULL);
-  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
-  xTaskCreate(&Task_store_uptime, "Task store up time", 4096, NULL, 1, NULL);
+  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
+  xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 5, &gpsTaskHandle);
+  xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10,
+    &timeSyncTaskHandle);
+  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
+  xTaskCreate(&Task_store_uptime, "Task store up time", 4096, NULL, 1,
+    &storeUpTimeTaskHandle);
   // create timer
   xTimers[0] = xTimerCreate(
     "A timer", pdMS_TO_TICKS( 10000 ), pdTRUE, 0, vTimerCallback);

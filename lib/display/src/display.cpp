@@ -24,5 +24,11 @@ void LilyGoDisplay::set(char *bfr) {
   this->displ.display();
 }
 
+// put the display in sleep state
+void LilyGoDisplay::off() {
+  this->displ.clearDisplay();
+  this->displ.display();
+};
+
 void LilyGoDisplay::loop() {
 }
