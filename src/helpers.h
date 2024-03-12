@@ -5,8 +5,11 @@
 #include <Arduino.h>
 
 /*
- * Convert a timestamp to a printable buffer
+ * Calculate the next fix and send time
  */
-void timestamp_to_string(time_t timestamp, char *bfr) {
-    strftime(bfr, 20, "%F\n%T", gmtime( &timestamp ));
+
+time_t next_send_time(time_t now, time_t delay) {
+    time_t full_hour = int(now/3600) * 3600;
+    uint8_t cycles = int(now % 3600/delay);
+    return full_hour + (cycles + 1) * delay;
 }
