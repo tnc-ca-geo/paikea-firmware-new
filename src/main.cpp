@@ -11,7 +11,7 @@
 #include "helpers.h"
 
 // debug flags
-#define DEBUG 0
+#define DEBUG 1
 #define GPS_ON true
 #define SLEEP 1
 #define USE_DISPLAY 1
@@ -20,6 +20,10 @@
 #define PORT_EXPANDER_I2C_ADDRESS 0x24
 #define SHARED_SERIAL_RX_PIN 35
 #define SHARED_SERIAL_TX_PIN 12
+#define ROCKBLOCK_SERIAL_RX_PIN 34
+#define ROCKBLOCK_SERIAL_TX_PIN 25
+#define ROCKBLOCK_SERIAL_SPEED 115200
+// 19200
 #define NUM_TIMERS 1
 #define uS_TO_S_FACTOR 1000000
 #define SLEEP_TIME 30
@@ -102,7 +106,8 @@ Preferences preferences;
 
 // Initialize Hardware
 //
-HardwareSerial shared_serial(2);
+HardwareSerial shared_serial(1);
+HardwareSerial rockblock_serial(2);
 // Port Expander using i2c
 Expander expander = Expander(Wire);
 // GPS using UART
@@ -110,20 +115,22 @@ Gps gps = Gps(expander, shared_serial);
 // Display using i2c, for development only.
 LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
-// LoraRockblock rockblock = LoraRockblock(expander, shared_serial);
+LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
 
-// We have three different levels of variable persistence:
-// 1. Memory that only persists when up between two sleep cycles.
-// 2. Memory that persists through sleep cycles (RTC).
-// 3. Storage that persists even if device is off (Preferences).
+/* We need/use three different levels of variable persistence:
+ *
+ * 1. Memory that only persists when up between two sleep cycles.
+ * 2. Memory that persists through sleep cycles (RTC).
+ * 3. Storage that persists even if device is off (Preferences).
+ */
 
-// store state
+// 1. Define state object
 struct state {
-  // keep different timers for debugging
+  // Keep different timers for debugging
   time_t real_time;
   time_t prior_uptime;
   time_t uptime;
-  // we inform all components to go to sleep gracefully and check whether
+  // We inform all components to go to sleep gracefully and check whether
   // they are ready
   bool go_to_sleep;
   bool gps_sleep_ready;
@@ -133,13 +140,14 @@ struct state {
   bool display_sleep_ready;
   bool rockblock_sleep_ready;
 } state;
-// state variables that should survive deep sleep, store in RTC memory
-// RTC_DATA_ATTR int uptime = 0;
+// 2. State variables that should survive deep sleep to be stored in RTC memory
 RTC_DATA_ATTR time_t rtc_start = 0;
 RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
 RTC_DATA_ATTR time_t rtc_prior_uptime;
 RTC_DATA_ATTR bool rtc_first_fix = true;
 RTC_DATA_ATTR bool rtc_first_run = true;
+// 3. We use preferences to store any value that should be persisted while
+// device is off.
 
 
 /*
@@ -252,26 +260,22 @@ void Task_display(void *pvParameters) {
   }
 }
 
-/*
+
 void Task_rockblock(void *pvParameters) {
   Serial.println("Rockblock running!");
+  if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+    rockblock.toggle(true);
+    xSemaphoreGive(mutex_i2c);
+  }
+  // vTaskDelay( pdMS_TO_TICKS( 200 ) );
+  // rockblock.configure();
+  // rockblock.join();
   for (;;) {
-    if (state.go_to_sleep) {
-      rockblock.toggle(false);
-      state.rockblock_sleep_ready = true;
-      vTaskDelete( rockblockTaskHandle );
-    } else {
-      if (xSemaphoreTake(mutex_serial, 200) == pdTRUE) {
-        rockblock.loop();
-        xSemaphoreGive(mutex_serial);
-      } else {
-        Serial.println("Rockblock serial blocked");
-      }
-    }
+    rockblock.loop();
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
-*/
+
 
 // run GPS
 void Task_gps(void *pvParameters) {
@@ -310,7 +314,7 @@ void Task_gps(void *pvParameters) {
         Serial.println("Waiting for GPS");
       }
     }
-    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
 
@@ -328,7 +332,7 @@ void Task_wait_for_sleep(void *pvParameters) {
       state.gps_sleep_ready, state.rockblock_sleep_ready);
     Serial.print(bfr);
     bool sleep_ready = state.blink_sleep_ready && state.display_sleep_ready &&
-      state.gps_sleep_ready; // && state.rockblock_sleep_ready;
+      state.gps_sleep_ready && state.rockblock_sleep_ready;
     if (sleep_ready) {
       Serial.println("Going to sleep");
       // sets all expander pins to input to conserve power
@@ -355,60 +359,65 @@ void Task_wait_for_sleep(void *pvParameters) {
 void Task_schedule(void *pvParameters) {
   for (;;) {
     if ( state.gps_sleep_ready ) {
-      state.go_to_sleep = true;
-      if (!waitForSleepTaskHandle) {
-        xTaskCreate(&Task_wait_for_sleep, "Check Sleep ready", 2048, NULL, 10,
-          &waitForSleepTaskHandle);
+      if ( !state.rockblock_sleep_ready && !rockblockTaskHandle ) {
+        xTaskCreate(&Task_rockblock, "Task Rockblock", 4096, NULL, 10,
+          &rockblockTaskHandle);
+      } else {
+        state.go_to_sleep = true;
+        if (!waitForSleepTaskHandle) {
+          xTaskCreate(&Task_wait_for_sleep, "Check Sleep ready", 2048, NULL, 10,
+            &waitForSleepTaskHandle);
+        }
       }
     }
     vTaskDelay( pdMS_TO_TICKS( 500 ) );
   }
 }
 
-/*
- * Since our real workflow (taking a certain time) is not implemented yet
- * we are using a timer to go to deep sleep.
- */
-void vTimerCallback(TimerHandle_t xtimer) {
-    Serial.println("Start sleep sequence");
-    state.go_to_sleep = true;
-    if (!waitForSleepTaskHandle) {
-      xTaskCreate(&Task_wait_for_sleep, "Check Sleep ready", 2048, NULL, 10,
-        &waitForSleepTaskHandle);
-    }
+void Task_send_message(void *pvParameters) {
+  for (;;) {
+    if (rockblock.queueMessage((char*) "Hello world!\0")) {
+      Serial.println("\nSending message");
+    } else {
+      Serial.println("Rockblock busy");
+    };
+    vTaskDelay( pdMS_TO_TICKS( 30 * 1000 ) );
   }
+}
 
 
 void setup() {
   // ---- Start Serial for debugging --------------
   Serial.begin(115200);
+  // ----- Init Shared Serial ---------------------
+  shared_serial.begin(
+    9600, SERIAL_8N1, SHARED_SERIAL_RX_PIN, SHARED_SERIAL_TX_PIN);
+  rockblock_serial.begin(
+    ROCKBLOCK_SERIAL_SPEED, SERIAL_8N1, ROCKBLOCK_SERIAL_RX_PIN,
+    ROCKBLOCK_SERIAL_TX_PIN);
   // ---- Start I2C bus for peripherials ----------
   Wire.begin();
-  // ---- Load persisted into state ---------------
+  // ---- Give some time to stabilize -------------
+  delay(100);
+  // ----------------------------------------------
+  // ----- Init Display
+  display.begin();
+  // ----- Init Expander --------------------------
+  expander.begin(PORT_EXPANDER_I2C_ADDRESS);
+  // ----- Init Blink -----------------------------
+  expander.pinMode(10, EXPANDER_OUTPUT);
+  // ----- Turn on or off GPS ---------------------
+  gps.toggle(GPS_ON);
+  // -------------------------------
+  // ---- Load persisted values into state --------
   if ( rtc_first_run ) {
     preferences.begin("debug", false);
     rtc_prior_uptime = preferences.getUInt("uptime", 0);
     preferences.end();
     rtc_first_run = false;
   }
-  // ----------------------------------------------
-  // ----- Init Display
-  display.begin();
-  // ----- Init Expander -----------
-  expander.begin(PORT_EXPANDER_I2C_ADDRESS);
-  // ----- Init Blink
-  expander.pinMode(10, EXPANDER_OUTPUT);
-  // ----- Init Shared Serial ------
-  shared_serial.begin(
-    9600, SERIAL_8N1, SHARED_SERIAL_RX_PIN, SHARED_SERIAL_TX_PIN);
-  // ----- Make sure GPS and Rockblock are never on at the same time since they
-  // ----- are share the Serial
-  // rockblock.toggle(false);
-  // ----- Turn on or off GPS ----------------
-  gps.toggle(GPS_ON);
-  // -------------------------------
 
-  // ------ FreeRTOS setup ---------
+  // ------ FreeRTOS setup ------------------------
   // a mutex managing the use of the shared I2C bus
   mutex_i2c = xSemaphoreCreateMutex();
   // a mutex protecting shared Serial
@@ -418,20 +427,20 @@ void setup() {
 
   // create simple tasks (for now)
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
-  xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
+  // xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
   xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10,
     &timeSyncTaskHandle);
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
-  xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
+  // xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
+  xTaskCreate(&Task_rockblock, "Task Rockblock", 4096, NULL, 10,
+    &rockblockTaskHandle);
+  xTaskCreate(&Task_send_message, "Task send message", 4096, NULL, 10, NULL);
 
-/*  // create timers
-#if SLEEP
-  xTimers[0] = xTimerCreate(
-    "A timer", pdMS_TO_TICKS( WAKE_TIME * 1000 ), pdTRUE, 0, vTimerCallback);
-  xTimerStart(xTimers[0], 0);
-#endif
+  // create timers
+  // xTimers[0] = xTimerCreate(
+  //  "A timer", pdMS_TO_TICKS( 10 * 1000 ), pdTRUE, 0, vTimerCallback);
+  // xTimerStart(xTimers[0], 0);
   // ------------------------------------------
-*/
 
 }
 

@@ -1,5 +1,5 @@
 /*
- * Basic interface for port expander mimickint the Arduino port methods.
+ * Class to interact with port expander mimicking Arduino port methods.
  */
 #ifndef EXPANDER
 #define EXPANDER
@@ -8,22 +8,21 @@
 #include <Wire.h>
 #include <tuple>
 
+
 #define EXPANDER_OUTPUT 0
 #define EXPANDER_INPUT 1
+
 
 const uint8_t TCA95_DEFAULTS[8] = {
   0b00000000,  // Input register level port 0 (read only)
   0b00000000,  // Input register level port 1 (read only)
-  // write output to those registers
-  0b11111111,  // Output register level port 0
-  0b11111111,  // Output register level port 1
+  0b00000000,  // Output register level port 0
+  0b00000000,  // Output register level port 1
   0b00000000,  // Pin polarity port 0
   0b00000000,  // Pin polarity port 1
   0b11111111,  // IO direction 1 ... input, 0 ... output port 0
   0b11111111   // IO direction 1 ... input, 0 ... output port 1
 };
-// const uint8_t EXPANDER_OUTPUT = 0;
-// const uint8_t EXPANDER_INPUT = 1;
 
 // This seems to be a good way to test whether we have power on the bus
 // https://forum.arduino.cc/t/i2c-is-it-possible-to-catch-error-no-bus-or-no-slave/456662
@@ -43,8 +42,7 @@ private:
 
 public:
     Expander(TwoWire& i2c);
-    // configure Expander with an I2C address, the offset is used to not
-    // conflict with MC pins
+    // configure Expander with an I2C address
     void begin(uint8_t i2c_address);
     void init();
     // overload methods to be compatible with Arduino's pinMode, digitalWrite,
