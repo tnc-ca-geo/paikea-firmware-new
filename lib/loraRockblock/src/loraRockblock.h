@@ -24,9 +24,12 @@ class LoraRockblock {
         HardwareSerial* serial;
         Expander *expander;
         // State variables
-        uint8_t event;
-        bool joining = false;
+        uint8_t event = NOEVENT;
         bool enabled = false;
+        bool joining = false;
+        int16_t lastRssi = 0;
+        int16_t lastSnr = 0;
+        int16_t lastDr = 0;
         bool sending = false;
         char outGoingMessage[255] = {0};
         bool messageWaiting = false;
@@ -43,6 +46,7 @@ class LoraRockblock {
         LoraRockblock(Expander &expander, HardwareSerial &serial);
         void join();
         bool configure();
+        uint16_t getRssi();
         void loop();
         // Use to send message in main program
         bool queueMessage(char *buffer, size_t len=255);

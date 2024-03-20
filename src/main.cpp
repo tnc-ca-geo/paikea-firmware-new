@@ -105,7 +105,6 @@ static TaskHandle_t rockblockTaskHandle = NULL;
 Preferences preferences;
 
 // Initialize Hardware
-//
 HardwareSerial shared_serial(1);
 HardwareSerial rockblock_serial(2);
 // Port Expander using i2c
@@ -139,6 +138,7 @@ struct state {
   bool expander_sleep_ready;
   bool display_sleep_ready;
   bool rockblock_sleep_ready;
+  int16_t rssi;
 } state;
 // 2. State variables that should survive deep sleep to be stored in RTC memory
 RTC_DATA_ATTR time_t rtc_start = 0;
@@ -247,8 +247,8 @@ void Task_display(void *pvParameters) {
       if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
         strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
         sprintf(
-          out_string, "%s\nup %7d\nlst %6d", time_string, state.uptime,
-          rtc_prior_uptime);
+          out_string, "%s\nup %7d\nrssi %5d", time_string, state.uptime,
+          state.rssi);
         xSemaphoreGive(mutex_state);
       }
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
@@ -272,6 +272,10 @@ void Task_rockblock(void *pvParameters) {
   // rockblock.join();
   for (;;) {
     rockblock.loop();
+    if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+      state.rssi = rockblock.getRssi();
+      xSemaphoreGive(mutex_state);
+    }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }

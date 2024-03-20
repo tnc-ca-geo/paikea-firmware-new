@@ -7,6 +7,25 @@
 #define DEBUG 1
 
 
+/*
+ * TODO: Improve, check whether next character is a digit.
+ */
+uint16_t parseValue(char *bfr, char *valuePrefix, size_t len, char end) {
+    char valueString[5] = {0};
+    size_t idx = 0;
+    char* pos = strstr(bfr, valuePrefix);
+    if (pos != NULL) {
+        pos = pos + len;
+        while (pos[idx] != end) {
+            valueString[idx] = pos[idx];
+            idx++;
+        }
+        return strtol(valueString, NULL, 10);
+    }
+    return 0;
+}
+
+
 LoraRockblock::LoraRockblock(Expander &expander, HardwareSerial &serial) {
     this->expander = &expander;
     this->serial = &serial;
@@ -155,16 +174,32 @@ void LoraRockblock::readResponse(char *buffer) {
 }
 
 
+uint16_t LoraRockblock::getRssi() {
+    return this->lastRssi;
+}
+
+
 void LoraRockblock::parseResponse(char *bfr) {
     this->event = NOEVENT;
     if (matchBuffer(bfr, (char*) "CJOIN:OK")) {
         event = JOIN_SUCCESS;
-    } else if(matchBuffer(bfr, (char*) "CJOIN:FAIL")) {
+    }
+    if(matchBuffer(bfr, (char*) "CJOIN:FAIL")) {
         event = JOIN_FAILURE;
-    } else if(matchBuffer(bfr, (char*) "OK+RECV")) {
+    }
+    if(matchBuffer(bfr, (char*) "OK+RECV")) {
         event = SEND_SUCCESS;
-    } else if(matchBuffer(bfr, (char*) "ERR+SENT")) {
+    }
+    if(matchBuffer(bfr, (char*) "ERR+SEND")) {
         event = SEND_FAILURE;
+    }
+    if(matchBuffer(bfr, (char*) "CME ERROR") && this->sending) {
+        event = SEND_FAILURE;
+    }
+    if(matchBuffer(bfr, (char*) "receive data:")) {
+        this->lastRssi = parseValue(bfr, (char*) "rssi = ", 7, ',');
+        this->lastSnr = parseValue(bfr, (char*) "snr = ", 6, ',');
+        this->lastDr = parseValue(bfr, (char*) "datarate = ", 11, '\r');
     }
     bfr[0] = 0;
 }
@@ -192,6 +227,8 @@ void LoraRockblock::loop() {
         break;
 
         case JOIN_SUCCESS: {
+            snprintf(this->nextCommand, 64, "AT+CSAVE\n");
+            this->commandWaiting = true;
             this->joining = false;
         }
         break;
