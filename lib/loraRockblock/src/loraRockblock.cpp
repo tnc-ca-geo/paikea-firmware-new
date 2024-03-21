@@ -166,33 +166,54 @@ void LoraRockblock::readResponse(char *buffer) {
         buffer[idx] = this->serial->read();
         if (idx > 254) {
             Serial.println("Read buffer overflow!");
-        } else {
-            idx++;
-        }
+        } else idx++;
     }
     buffer[idx] = 0;
 }
 
-
+// getters for private properties
 uint16_t LoraRockblock::getRssi() {
     return this->lastRssi;
+}
+
+size_t LoraRockblock::getLastMessage(char *bfr) {
+    size_t len = strlen(this->lastMessage);
+    Serial.print("LEN: "); Serial.println(len);
+    memcpy(bfr, this->lastMessage, len);
+    bfr[len] = 0;
+    return len;
+}
+
+// parse message from buffer
+size_t LoraRockblock::parseMessage(char * bfr) {
+    char *s;
+    char numberString[3] = {0};
+    size_t len = 0;
+    s = strstr(bfr, (char*) "OK+RECV:");
+    if (s != NULL) {
+        memcpy(numberString, s+14, 2);
+        len = std::stoi(numberString, 0, 16);
+        for (size_t i=0; i<len; i++) {
+            memcpy(numberString, s+17+2*i, 2);
+            this->lastMessage[i] = std::stoi(numberString, 0, 16);
+        }
+        this->lastMessage[len] = 0;
+        return len;
+    }
+    this->lastMessage[0] = 0;
+    return 0;
 }
 
 
 void LoraRockblock::parseResponse(char *bfr) {
     this->event = NOEVENT;
-    if (matchBuffer(bfr, (char*) "CJOIN:OK")) {
-        event = JOIN_SUCCESS;
-    }
-    if(matchBuffer(bfr, (char*) "CJOIN:FAIL")) {
-        event = JOIN_FAILURE;
-    }
-    if(matchBuffer(bfr, (char*) "OK+RECV")) {
+    if (matchBuffer(bfr, (char*) "CJOIN:OK")) event = JOIN_SUCCESS;
+    if (matchBuffer(bfr, (char*) "CJOIN:FAIL")) event = JOIN_FAILURE;
+    if (matchBuffer(bfr, (char*) "OK+RECV")) {
+        parseMessage(bfr);
         event = SEND_SUCCESS;
     }
-    if(matchBuffer(bfr, (char*) "ERR+SEND")) {
-        event = SEND_FAILURE;
-    }
+    if(matchBuffer(bfr, (char*) "ERR+SEND")) event = SEND_FAILURE;
     if(matchBuffer(bfr, (char*) "CME ERROR") && this->sending) {
         event = SEND_FAILURE;
     }

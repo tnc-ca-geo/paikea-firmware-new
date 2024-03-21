@@ -139,6 +139,7 @@ struct state {
   bool display_sleep_ready;
   bool rockblock_sleep_ready;
   int16_t rssi;
+  char message[255] = {0};
 } state;
 // 2. State variables that should survive deep sleep to be stored in RTC memory
 RTC_DATA_ATTR time_t rtc_start = 0;
@@ -246,9 +247,9 @@ void Task_display(void *pvParameters) {
     } else {
       if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
         strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
-        sprintf(
-          out_string, "%s\nup %7d\nrssi %5d", time_string, state.uptime,
-          state.rssi);
+        snprintf(
+          out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
+          state.message);
         xSemaphoreGive(mutex_state);
       }
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
@@ -262,7 +263,6 @@ void Task_display(void *pvParameters) {
 
 
 void Task_rockblock(void *pvParameters) {
-  Serial.println("Rockblock running!");
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
@@ -274,6 +274,7 @@ void Task_rockblock(void *pvParameters) {
     rockblock.loop();
     if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
       state.rssi = rockblock.getRssi();
+      rockblock.getLastMessage(state.message);
       xSemaphoreGive(mutex_state);
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );

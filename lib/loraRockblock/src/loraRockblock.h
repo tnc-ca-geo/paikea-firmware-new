@@ -27,9 +27,10 @@ class LoraRockblock {
         uint8_t event = NOEVENT;
         bool enabled = false;
         bool joining = false;
+        int16_t lastDr = 0;
+        char lastMessage[255] = {0};
         int16_t lastRssi = 0;
         int16_t lastSnr = 0;
-        int16_t lastDr = 0;
         bool sending = false;
         char outGoingMessage[255] = {0};
         bool messageWaiting = false;
@@ -41,12 +42,14 @@ class LoraRockblock {
         /* Compose a message AT command including encoding */
         void createMessageCommand();
         bool matchBuffer(char *haystack, char *needle, size_t len=255);
+        size_t parseMessage(char *bfr);
         void parseResponse(char *bfr);
     public:
         LoraRockblock(Expander &expander, HardwareSerial &serial);
         void join();
         bool configure();
         uint16_t getRssi();
+        size_t getLastMessage(char *bfr);
         void loop();
         // Use to send message in main program
         bool queueMessage(char *buffer, size_t len=255);
