@@ -116,14 +116,15 @@ void LoraRockblock::join() {
 
 bool LoraRockblock::queueMessage(char *bfr, size_t len) {
     size_t i=0;
-    if (!messageWaiting) {
+    if (!messageInQueue) {
         for (i; i<len; i++) {
             this->outGoingMessage[i] = bfr[i];
             if (bfr[i] == 0) { break; }
         }
         if (i < 255) i++;
         this->outGoingMessage[i] = 0;
-        this->messageWaiting = true;
+        this->messageInQueue = true;
+        this->sendSuccess = false;
         return true;
     }
     Serial.println("Queue not available.");
@@ -132,7 +133,9 @@ bool LoraRockblock::queueMessage(char *bfr, size_t len) {
 
 
 bool LoraRockblock::available() {
-    return !(this->joining || this->sending || this->commandWaiting);
+    return (
+        !(this->joining || this->sending || this->commandWaiting) &&
+        this->enabled);
 }
 
 
@@ -153,7 +156,7 @@ void LoraRockblock::createMessageCommand() {
     this->nextCommand[cmd_len] = 0x0d;
     this->sending = true;
     this->commandWaiting = true;
-    this->messageWaiting = false;
+    this->messageInQueue = false;
 }
 
 /*
@@ -178,10 +181,17 @@ uint16_t LoraRockblock::getRssi() {
 
 size_t LoraRockblock::getLastMessage(char *bfr) {
     size_t len = strlen(this->lastMessage);
-    Serial.print("LEN: "); Serial.println(len);
     memcpy(bfr, this->lastMessage, len);
     bfr[len] = 0;
     return len;
+}
+
+bool LoraRockblock::getSendSuccess() {
+    return this->sendSuccess;
+}
+
+bool LoraRockblock::getEnabled() {
+    return this->enabled;
 }
 
 // parse message from buffer
@@ -262,19 +272,20 @@ void LoraRockblock::loop() {
         case SEND_SUCCESS: {
             Serial.println("SEND SUCCESS");
             this->sending = false;
+            this->sendSuccess = true;
         }
         break;
 
         case SEND_FAILURE: {
             Serial.println("SEND FAILURE");
             this->sending = false;
+            this->sendSuccess = true;
         }
-
         break;
     }
 
     // Take actions
-    if (this->available() && this->messageWaiting ) {
+    if (this->available() && this->messageInQueue ) {
         Serial.println("CREATE MESSAGE");
         this->createMessageCommand();
     }
@@ -291,6 +302,11 @@ void LoraRockblock::loop() {
  * TODO: Integrate with low power management
  */
 void LoraRockblock::toggle(bool on) {
+    if (!on) {
+
+        snprintf(this->nextCommand, 32, "AT+CSLEEP=2\r");
+        sendAndReceive(nextCommand, this->responseBuffer, (char*) "OK");
+    }
     this->expander->pinMode(13, EXPANDER_OUTPUT);
     this->expander->digitalWrite(13, !on);
     this->enabled = on;

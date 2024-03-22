@@ -1,10 +1,6 @@
 #include <gps.h>
 
-
 const uint8_t BUFFER_SIZE = 255;
-
-
-//HardwareSerial gps_serial(2);
 
 
 Gps::Gps(Expander &expander, HardwareSerial &serial) {
@@ -34,7 +30,6 @@ void Gps::loop() {
     char character;
     while(this->serial->available()) {
         character = this->serial->read();
-        // Serial.print(character);
         this->gps_parser.encode(character);
     }
     if (
@@ -47,19 +42,9 @@ void Gps::loop() {
             this->gps_parser.date, this->gps_parser.time);
         this->lat = this->gps_parser.location.lat();
         this->lng = this->gps_parser.location.lng();
-        // We doing this since we sometimes got updated but wrong time 1999.
-        // Consider only readings after 2001 valid
-        // TODO: check whether isValid does the same
-        // if (this->epoch > 975542400) {
         this->updated = true;
-        // } else {
-        //    this->updated = false;
-        //}
-    } else {
-        this->updated = false;
-    }
+    } else this->updated = false;
 }
-
 
 /*
  * Read one line from the GPS and store into buffer. This is currently unused
