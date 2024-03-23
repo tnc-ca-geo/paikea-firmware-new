@@ -8,7 +8,9 @@
 #include <display.h>
 #include <loraRockblock.h>
 // project
+#include "pindefs.h"
 #include "helpers.h"
+#include "state.h"
 
 // debug flags
 #define DEBUG 1
@@ -16,76 +18,8 @@
 #define SLEEP 1
 #define USE_DISPLAY 1
 
-// settings and pindefs
-#define PORT_EXPANDER_I2C_ADDRESS 0x24
-#define GPS_SERIAL_RX_PIN 35
-#define GPS_SERIAL_TX_PIN 12
-#define ROCKBLOCK_SERIAL_RX_PIN 34
-#define ROCKBLOCK_SERIAL_TX_PIN 25
-#define ROCKBLOCK_SERIAL_SPEED 115200
-#define NUM_TIMERS 1
-#define uS_TO_S_FACTOR 1000000
-#define SLEEP_TIME 300
-#define WAKE_TIME 60
-// time before we decide that we won't get a fix
-#define GPS_TIME_OUT 300
-
-/* Pin mapping
-===  ========   === ======
-Pin  label      Pin label
-===  ========   === ======
-00   gps_enb    10  led1
-01   xl_enb     11  led2
-02   v5_enb     12  led3
-03   button0    13  ird_enb
-04   button1    14  ird_ri
-05   button2    15  ird_netav
-06   NC         16  ird_cts
-07   led0       17  ird_rts
-===  ========  === ======
-*/
-
-/* Nets
-========    ====  ===  ========================
-function    port  bit  config (input or output)
-========    ====  ===  ========================
-
-gps_enb     0     0    0
-xl_enb      0     1    0
-gps_extint  0     2    1
-button0     0     3    1
-button1     0     4    1
-button2     0     5    1
-unused      0     6    0
-led0        0     7    0
-led1        1     0    0
-led2        1     1    0
-led3        1     2    0
-ird_enb     1     3    0
-ird_ri      1     4    1
-ird_netav   1     5    1
-ird_cts     1     6    1
-ird_rts     1     7    0
-*/
-
-
-// see https://www.ti.com/lit/ds/symlink/tca9535.pdf
-uint8_t config_values[] = {
-  0b00000000,  // Input register level port 0 (read only)
-  0b00000000,  // Input register level port 1 (read only)
-  // write output to those registers
-  0b00000000,  // Output register level port 0
-  0b00000000,  // Output register level port 1
-  0b00000000,  // Pin polarity port 0
-  0b00000000,  // Pin polarity port 1
-  0b00111100,  // IO direction 1 ... input, 0 ... output port 0
-  0b01110000   // IO direction 1 ... input, 0 ... output port 1
-};
-
 // Use to protect I2C
 static SemaphoreHandle_t mutex_i2c;
-// Use to protect the state object
-static SemaphoreHandle_t mutex_state;
 // create TimerHandles
 static TimerHandle_t xTimers[ NUM_TIMERS ];
 // create TaskhHandles
@@ -111,6 +45,8 @@ Gps gps = Gps(expander, gps_serial);
 LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
 LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
+// State object
+SystemState sys_state = SystemState();
 
 /* We need/use three different levels of variable persistence:
  *
@@ -119,29 +55,10 @@ LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
  * 3. Storage that persists even if device is off (Preferences).
  */
 
+
 /*
- * 1. Define state object
- */
-struct state {
-  // Keep different timers for debugging
-  time_t real_time;
-  time_t prior_uptime;
-  time_t uptime;
-  // We inform all components to go to sleep gracefully and check whether
-  // they are ready
-  bool go_to_sleep;
-  bool gps_done;
-  bool gps_got_fix;
-  bool blink_sleep_ready;
-  bool expander_sleep_ready;
-  bool display_off;
-  bool rockblock_sleep_ready;
-  bool send_success;
-  int16_t rssi;
-  char message[255] = {0};
-} state;
-/*
- * 2. State variables that should survive deep sleep to be stored in RTC memory
+ * 1. State variables that should survive deep sleep to be stored in RTC memory
+ * TODO: Move to state.
  */
 RTC_DATA_ATTR time_t rtc_start = 0;
 RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
@@ -165,8 +82,8 @@ void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   for(;;) {
     // blink state seems to be reversed; deregister when LED is off
-    if (state.go_to_sleep && blink_state) {
-      state.blink_sleep_ready = true;
+    if (sys_state.getGoToSleep() && blink_state) {
+      sys_state.setBlinkSleepReady(true);
       vTaskDelete( blinkTaskHandle );
     } else {
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
@@ -181,6 +98,7 @@ void Task_blink(void *pvParamaters) {
 
 /*
  * Synchronize system time with GPS and re-establish "real-time" after sleep.
+ * TODO: Some of this could be added to the state class
  */
 void Task_time_sync(void *pvParameters) {
   time_t sync_time = 0;
@@ -188,11 +106,7 @@ void Task_time_sync(void *pvParameters) {
   time_t uptime = 0;
   bool got_fix = false;
   for(;;) {
-    // read state to local variables to not hold on to mutex for too long
-    if (xSemaphoreTake(mutex_state, 50) == pdTRUE) {
-      real_time = state.real_time;
-      xSemaphoreGive(mutex_state);
-    }
+    real_time = sys_state.getRealTime();
     if (gps.updated) {
 #if DEBUG
       char bfr[255] = {0};
@@ -207,13 +121,10 @@ void Task_time_sync(void *pvParameters) {
       }
     } else real_time = rtc_expected_wakeup + esp_timer_get_time()/1E6;
     uptime = real_time - rtc_start;
-    // write back values to state
-    if (xSemaphoreTake(mutex_state, 50) == pdTRUE) {
-      state.real_time = real_time;
-      state.uptime = uptime;
-      state.gps_got_fix = gps.updated;
-      xSemaphoreGive(mutex_state);
-    }
+    // write back values state
+    sys_state.setGpsGotFix( gps.updated );
+    sys_state.setRealTime(real_time);
+    sys_state.setUptime(uptime);
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
@@ -225,23 +136,23 @@ void Task_time_sync(void *pvParameters) {
  */
 void Task_display(void *pvParameters) {
   uint8_t size = 0;
+  char message_string[255] = {0};
   char out_string[255] = {0};
-  char time_string[20] = {0};
+  char time_string[22] = {0};
   for(;;) {
-    if (state.display_off) {
+    if ( sys_state.getDisplayOff() ) {
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.off();
         xSemaphoreGive(mutex_i2c);
         vTaskDelete( displayTaskHandle );
       }
     } else {
-      if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-        strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
-        snprintf(
-          out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
-          state.message);
-        xSemaphoreGive(mutex_state);
-      }
+      time_t time = sys_state.getRealTime();
+      sys_state.getMessage(message_string);
+      strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
+      snprintf(
+        out_string, 50, "%s\nrssi %5d\n%s", time_string, sys_state.getRssi(),
+        message_string);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.set(out_string);
         xSemaphoreGive(mutex_i2c);
@@ -253,6 +164,7 @@ void Task_display(void *pvParameters) {
 
 
 void Task_rockblock(void *pvParameters) {
+  char message[255] = {0};
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
@@ -264,17 +176,12 @@ void Task_rockblock(void *pvParameters) {
   // rockblock.join();
   for (;;) {
     rockblock.loop();
-    if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-      state.rssi = rockblock.getRssi();
-      rockblock.getLastMessage(state.message);
-      xSemaphoreGive(mutex_state);
-    }
+    rockblock.getLastMessage(message);
+    sys_state.setMessage(message);
+    sys_state.setRssi( rockblock.getRssi() );
     if (rockblock.getSendSuccess()) {
       rockblock.toggle( false );
-      if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-        state.rockblock_sleep_ready = true;
-        xSemaphoreGive( mutex_state );
-      }
+      sys_state.setRockblockSleepReady( true );
       vTaskDelete( rockblockTaskHandle );
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
@@ -289,13 +196,13 @@ void Task_gps(void *pvParameters) {
     // waiting for a GPS fix before going to sleep
     // TODO: add timeout if we never get one
     // TODO: this should move to the logic that triggers sleep state
-    if ((state.gps_got_fix) || esp_timer_get_time()/1E6 > GPS_TIME_OUT) {
+    if (sys_state.getGpsGotFix() || esp_timer_get_time()/1E6 > GPS_TIME_OUT) {
       Serial.println("GPS going to sleep");
       // disable GPS
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.toggle(false);
         xSemaphoreGive(mutex_i2c);
-        state.gps_done = true;
+        sys_state.setGpsDone(true);
         vTaskDelete( gpsTaskHandle );
       }
     } else {
@@ -315,7 +222,7 @@ void Task_gps(void *pvParameters) {
 void persistStateVariables() {
   Serial.println("Storing values");
   preferences.begin("debug", false);
-  preferences.putUInt("uptime", state.uptime);
+  preferences.putUInt("uptime", sys_state.getUptime());
   preferences.end();
 }
 
@@ -329,14 +236,14 @@ void Task_wait_for_sleep(void *pvParameters) {
   for (;;) {
     snprintf(bfr, 255,
       "Sleep ready state %d: blink %d, gps %d, rockblock %d\n",
-      state.go_to_sleep, state.blink_sleep_ready,
-      state.gps_done, state.rockblock_sleep_ready);
+      sys_state.getGoToSleep(), sys_state.getBlinkSleepReady(),
+      sys_state.getGpsDone(), sys_state.getRockblockSleepReady() );
     Serial.print(bfr);
     // check whether to initiate sleep
     if (
-      state.blink_sleep_ready &&
-      state.gps_done &&
-      state.rockblock_sleep_ready
+      sys_state.getBlinkSleepReady() &&
+      sys_state.getGpsDone() &&
+      sys_state.getRockblockSleepReady()
       ) {
       Serial.println("Going to sleep");
       // Sets expander to init state which uses hopefully the least power. All
@@ -346,18 +253,14 @@ void Task_wait_for_sleep(void *pvParameters) {
         xSemaphoreGive(mutex_i2c);
       }
       // Print next send time to serial.
-      snprintf(bfr, 255, "Next send time %d -> %d\n", state.real_time,
-        next_send_time(state.real_time, 300));
-      Serial.print(bfr);
+      snprintf(bfr, 255, "Next send time %d -> %d\n", sys_state.getRealTime(),
+        next_send_time(sys_state.getRealTime(), 300));
       // Set expected wake up time and turn display off
-      if (xSemaphoreTake(mutex_state, 50) == pdTRUE) {
-        // Set values that need to survive sleep but NOT a cold start
-        rtc_expected_wakeup = state.real_time + SLEEP_TIME;
-        state.display_off = true;
-        // Store state values into persistent storage
-        persistStateVariables();
-        xSemaphoreGive(mutex_state);
-      }
+      // Set values that need to survive sleep but NOT a cold start
+      rtc_expected_wakeup = sys_state.getRealTime() + SLEEP_TIME;
+      sys_state.setDisplayOff( true );
+      // Store state values into persistent storage
+      persistStateVariables();
       // Give some extra time for everything to settle down.
       vTaskDelay( pdMS_TO_TICKS( 250 ) );
       esp_deep_sleep_start();
@@ -370,19 +273,13 @@ void Task_wait_for_sleep(void *pvParameters) {
 void Task_schedule(void *pvParameters) {
   bool gps_done = false;
   for (;;) {
-    if (xSemaphoreTake(mutex_state, 50) == pdTRUE) {
-      gps_done = state.gps_done;
-      xSemaphoreGive(mutex_state);
-    }
+    gps_done = sys_state.getGpsDone();
     if ( rockblock.getSendSuccess() )  {
       if (xSemaphoreTake(mutex_i2c, 50) == pdTRUE) {
         rockblock.toggle(false);
         xSemaphoreGive(mutex_i2c);
       }
-      if (xSemaphoreTake(mutex_state, 50) == pdTRUE) {
-        state.go_to_sleep = true;
-        xSemaphoreGive(mutex_state);
-      }
+      sys_state.setGoToSleep(true);
     }
     if ( gps_done == true && rockblock.getEnabled() ) {
       rockblock.queueMessage((char*) "Hello world!\0");
@@ -417,6 +314,8 @@ void setup() {
     ROCKBLOCK_SERIAL_TX_PIN);
   // ---- Start I2C bus for peripherials ----------
   Wire.begin();
+  // ---- Load state
+  sys_state.init();
   // ---- Give some time to stabilize -------------
   vTaskDelay( pdTICKS_TO_MS(100) );
   // ----- Init Display
@@ -442,13 +341,11 @@ void setup() {
   }
 
   // ------ FreeRTOS setup ------------------------
-  // a mutex managing the use of the shared I2C bus
+  // A mutex managing the use of the shared I2C bus
   mutex_i2c = xSemaphoreCreateMutex();
-  // a mutex managing access to the state object
-  mutex_state = xSemaphoreCreateMutex();
 
   /*
-   * Create simple tasks (for now). We create all tasks now since some of the
+   * Create simple tasks (for now). We create all tasks here since some of the
    * hardware needs to boot as well.
    */
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
@@ -459,8 +356,8 @@ void setup() {
   xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
   xTaskCreate(&Task_rockblock, "Task Rockblock", 4096, NULL, 10,
     &rockblockTaskHandle);
-  // xTaskCreate(&Task_send_message, "Task send message", 4096, NULL, 10, NULL);
-  xTaskCreate(&Task_wait_for_sleep, "Task wait for sleep", 4096, NULL, 13, NULL);
+  xTaskCreate(&Task_wait_for_sleep, "Task wait for sleep", 4096, NULL, 13,
+    NULL);
 }
 
 // Since we are using RTOS nothing to do here.

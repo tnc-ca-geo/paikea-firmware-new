@@ -54,7 +54,7 @@ class LoraRockblock {
         void join();
         bool configure();
         bool getEnabled();
-        uint16_t getRssi();
+        int32_t getRssi();
         size_t getLastMessage(char *bfr);
         bool getSendSuccess();
         void loop();

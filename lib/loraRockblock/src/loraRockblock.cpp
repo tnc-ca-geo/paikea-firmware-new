@@ -47,6 +47,7 @@ bool LoraRockblock::matchBuffer(char* bfr, char* needle, size_t len) {
 bool LoraRockblock::sendAndReceive(char *command, char *bfr) {
     if (this->available()) {
         this->serial->write(command);
+        Serial.print(command);
         vTaskDelay( pdMS_TO_TICKS( 50 ));
         this->readResponse(bfr);
         return true;
@@ -175,7 +176,7 @@ void LoraRockblock::readResponse(char *buffer) {
 }
 
 // getters for private properties
-uint16_t LoraRockblock::getRssi() {
+int32_t LoraRockblock::getRssi() {
     return this->lastRssi;
 }
 
@@ -216,6 +217,7 @@ size_t LoraRockblock::parseMessage(char * bfr) {
 
 
 void LoraRockblock::parseResponse(char *bfr) {
+    Serial.print(bfr);
     this->event = NOEVENT;
     if (matchBuffer(bfr, (char*) "CJOIN:OK")) event = JOIN_SUCCESS;
     if (matchBuffer(bfr, (char*) "CJOIN:FAIL")) event = JOIN_FAILURE;
@@ -254,6 +256,7 @@ void LoraRockblock::loop() {
 
     // Update state
     switch(event) {
+
         case NOEVENT: {}
         break;
 
