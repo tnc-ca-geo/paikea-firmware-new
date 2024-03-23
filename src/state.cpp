@@ -4,8 +4,7 @@
 
 SystemState::SystemState() {}
 
-
-void SystemState::init() {}
+// Find SystemState::init below since it correspondents with ::persist
 
 
 bool SystemState::getBoolValue(bool *ref) {
@@ -101,12 +100,12 @@ bool SystemState::setBlinkSleepReady(bool value) {
 
 
 bool SystemState::getDisplayOff() {
-    return this->getBoolValue( &this->expander_sleep_ready );
+    return this->getBoolValue( &this->display_off );
 }
 
 
 bool SystemState::setDisplayOff(bool value) {
-    return this->setBoolValue( &this->blink_sleep_ready, value );
+    return this->setBoolValue( &this->display_off, value );
 }
 
 
@@ -186,4 +185,35 @@ size_t SystemState::getMessage(char *bfr) {
 
 bool SystemState::setMessage(char *bfr) {
     return this->setBuffer(this->message, bfr);
+}
+
+/*
+ * Initialize state from stored values, currently uptime is read into rtc
+ * memory that is not managed by this class.
+ *
+ * TODO: Clean up. Load all vars into state during runtime.
+ */
+bool SystemState::init() {
+    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
+        preferences.begin("debug", false);
+        // add variables to restore
+        preferences.end();
+        xSemaphoreGive( this->mutex );
+        return true;
+    } else return false;
+}
+
+/*
+ * Write variables to peristent storage using preferences.h. Since it uses
+ * the LittleFS filesystem, number of writes to SRAM is managed.
+ */
+bool SystemState::persist() {
+    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
+        preferences.begin("debug", false);
+        // add all variables that need to be persisted here, use sparengly
+        preferences.putUInt("uptime", this->uptime);
+        preferences.end();
+        xSemaphoreGive( this->mutex );
+        return true;
+    } else return false;
 }

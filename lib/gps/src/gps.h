@@ -1,5 +1,5 @@
-#ifndef GPS
-#define GPS
+#ifndef __GPS_H__
+#define __GPS_H__
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <TinyGPSPlus.h>
@@ -36,4 +36,4 @@ public:
     void toggle(bool gps_on);
 };
 
-#endif
+#endif /* __GPS_H__ */

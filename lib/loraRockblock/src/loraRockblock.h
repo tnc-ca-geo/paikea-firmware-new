@@ -2,8 +2,8 @@
  * This module simulates the Rockblock using a M5 LoraWan ASR6501 module. It is
  * not really a great LoRaWAN implementation.
  */
-#ifndef __LORAROCKBLOCK__
-#define __LORAROCKBLOCK__
+#ifndef __LORAROCKBLOCK_H__
+#define __LORAROCKBLOCK_H__
 #include <Arduino.h>
 #include <tca95xx.h>
 
@@ -63,4 +63,4 @@ class LoraRockblock {
         void toggle(bool on);
 };
 
-#endif
+#endif /* __LORAROCKBLOCK_H__ */

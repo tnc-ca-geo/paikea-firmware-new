@@ -3,18 +3,34 @@
  * getters. This could be a Singleton but that might make it more complicated
  * for now. This approach also has the advantage that we can create methods
  * that give us some combined logic of particular states.
+ *
+ * We need/use three levels of variable persistence:
+ *
+ * 1. Memory that only persists when up between two sleep cycles.
+ * 2. Memory that persists through sleep cycles (RTC).
+ *    - use slow RTC storage
+ * 3. Storage that persists even if device is off (Preferences).
+ *   - use preferences module
  */
-#ifndef __STATE
-#define __STATE
-
+#ifndef __STATE_H__
+#define __STATE_H__
 
 #include <Arduino.h>
+#include <Preferences.h>
 
 
 class SystemState {
 
     private:
         SemaphoreHandle_t mutex=xSemaphoreCreateMutex();
+        /*
+         * Use Preferences for persistent data storage and debugging when fully
+         * powered off. The Preferences library supposedly manages limited
+         * number of write write cycles to this kind of storage. Which is
+         * certainly not an issue with Scout but might be an issue with the
+         * Glue devices. So don't relay on this too much.
+         */
+        Preferences preferences;
         uint64_t real_time;
         uint64_t prior_uptime;
         uint64_t uptime;
@@ -41,7 +57,7 @@ class SystemState {
     public:
         SystemState();
         // init populates state variables from persistent storage
-        void init();
+        bool init();
         bool getBlinkSleepReady();
         bool setBlinkSleepReady(bool value);
         bool getDisplayOff();
@@ -65,7 +81,7 @@ class SystemState {
         uint64_t getUptime();
         bool setUptime(uint64_t time);
         // sleep writes some state variables into persistent storage
-        void sleep();
+        bool persist();
 };
 
-#endif
+#endif /* __STATE_H__ */

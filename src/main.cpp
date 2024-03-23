@@ -18,10 +18,25 @@
 #define SLEEP 1
 #define USE_DISPLAY 1
 
-// Use to protect I2C
+/*
+ * This variables will be persisted during deep sleep using slow RTC memory
+ * but cleared upon reset.
+ *
+ * Leave in global scope because of:
+ *
+ * https://arduino.stackexchange.com/questions/72537/cant-create-a-rtc-data-attr-var-inside-a-class
+ *
+ * Tried to move to state.h but causes double import problems I don't
+ * understand.
+ */
+RTC_DATA_ATTR time_t rtc_start = 0;
+RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
+RTC_DATA_ATTR time_t rtc_prior_uptime = 0;
+RTC_DATA_ATTR bool rtc_first_fix = true;
+RTC_DATA_ATTR bool rtc_first_run = true;
+
+// Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
-// create TimerHandles
-static TimerHandle_t xTimers[ NUM_TIMERS ];
 // create TaskhHandles
 static TaskHandle_t blinkTaskHandle = NULL;
 static TaskHandle_t displayTaskHandle = NULL;
@@ -31,8 +46,11 @@ static TaskHandle_t storeUpTimeTaskHandle = NULL;
 static TaskHandle_t waitForSleepTaskHandle = NULL;
 static TaskHandle_t rockblockTaskHandle = NULL;
 
-
-// Use preferences for debugging and data storage when off
+/*
+ * Use Preferences for persistent data storage and debugging when fully powered
+ * off. The Preferences library supposedly manages limited number of write
+ * write cycles to this kind of storage.
+ */
 Preferences preferences;
 // Initialize Hardware
 HardwareSerial gps_serial(1);
@@ -46,50 +64,26 @@ LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
 LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
 // State object
-SystemState sys_state = SystemState();
+SystemState state = SystemState();
 
-/* We need/use three different levels of variable persistence:
+/*
+ * Blink LED 10. This is a useful indicator for the system running. A mutex is
+ * needed since the I2C bus is shared with display and I/O expander.
  *
- * 1. Memory that only persists when up between two sleep cycles.
- * 2. Memory that persists through sleep cycles (RTC).
- * 3. Storage that persists even if device is off (Preferences).
- */
-
-
-/*
- * 1. State variables that should survive deep sleep to be stored in RTC memory
- * TODO: Move to state.
- */
-RTC_DATA_ATTR time_t rtc_start = 0;
-RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
-RTC_DATA_ATTR time_t rtc_prior_uptime = 0;
-RTC_DATA_ATTR bool rtc_first_fix = true;
-RTC_DATA_ATTR bool rtc_first_run = true;
-/*
- * 3. We use preferences to store any value that should be persisted while
- * device is off.
- * TODO: for the Glue device we need to have a strategy managing the life time
- * of this form of storage with about 10.000 write cycles. According to the
- * documentation this is already handled by preferences and LittleFS
- */
-
-/*
- * Blink LED 10. This is a useful indicator for the system running. A mutex
- * is needed since the I2C bus is shared with display and I/O expander.
- * TODO: Replace with a sophisticated way of system state indication.
+ * TODO: Replace with a more sophisticated way of system state indication.
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   for(;;) {
     // blink state seems to be reversed; deregister when LED is off
-    if (sys_state.getGoToSleep() && blink_state) {
-      sys_state.setBlinkSleepReady(true);
+    if (state.getGoToSleep() && blink_state) {
+      state.setBlinkSleepReady(true);
       vTaskDelete( blinkTaskHandle );
     } else {
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         expander.digitalWrite(10, blink_state);
         xSemaphoreGive(mutex_i2c);
-      } else Serial.println("missed blink");
+      } else Serial.println("Missed blink!");
       blink_state = !blink_state;
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
@@ -106,14 +100,14 @@ void Task_time_sync(void *pvParameters) {
   time_t uptime = 0;
   bool got_fix = false;
   for(;;) {
-    real_time = sys_state.getRealTime();
-    if (gps.updated) {
+    real_time = state.getRealTime();
+    if ( gps.updated ) {
 #if DEBUG
       char bfr[255] = {0};
       sprintf(bfr, "GPS %d, %d\n", gps.epoch, gps.updated);
       // Serial.print(bfr);
 # endif
-      sync_time = (esp_timer_get_time() - gps.gps_read_system_time)/1E6;
+      sync_time = ( esp_timer_get_time() - gps.gps_read_system_time )/1E6;
       real_time = gps.epoch + sync_time;
       if (rtc_first_fix) {
         rtc_start = real_time - uptime;
@@ -121,14 +115,14 @@ void Task_time_sync(void *pvParameters) {
       }
     } else real_time = rtc_expected_wakeup + esp_timer_get_time()/1E6;
     uptime = real_time - rtc_start;
-    // write back values state
-    sys_state.setGpsGotFix( gps.updated );
-    sys_state.setRealTime(real_time);
-    sys_state.setUptime(uptime);
+    // write back values to state
+    state.setRealTime( real_time );
+    state.setUptime( uptime );
+    // TODO: Move to GPS task.
+    state.setGpsGotFix( gps.updated );
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
-
 
 /*
  * Output part of the state to the display. We are using a mutex since we are
@@ -140,18 +134,19 @@ void Task_display(void *pvParameters) {
   char out_string[255] = {0};
   char time_string[22] = {0};
   for(;;) {
-    if ( sys_state.getDisplayOff() ) {
+    if ( state.getDisplayOff() ) {
+      Serial.println("Turn display off.");
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.off();
         xSemaphoreGive(mutex_i2c);
         vTaskDelete( displayTaskHandle );
       }
     } else {
-      time_t time = sys_state.getRealTime();
-      sys_state.getMessage(message_string);
+      time_t time = state.getRealTime();
+      state.getMessage(message_string);
       strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
       snprintf(
-        out_string, 50, "%s\nrssi %5d\n%s", time_string, sys_state.getRssi(),
+        out_string, 50, "%s\nrssi %5d\n%s", time_string, state.getRssi(),
         message_string);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.set(out_string);
@@ -162,26 +157,29 @@ void Task_display(void *pvParameters) {
   }
 }
 
-
+/*
+ * Running the radio. For now we are using a LoraWAN radio as stand-in for
+ * Rockblock.
+ *
+ * TODO: for the Glue device we need a more sophisticated strategy of joins and
+ * re-joins.
+ */
 void Task_rockblock(void *pvParameters) {
   char message[255] = {0};
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
-  // TODO: For the glue device we need to have a more sophisticated strategy
-  // to initiate joins and rejoins. Here we have a registered device and use it
-  // in place of a Rockblock. A rockblock does not need a join procedure.
   // rockblock.configure();
   // rockblock.join();
   for (;;) {
     rockblock.loop();
     rockblock.getLastMessage(message);
-    sys_state.setMessage(message);
-    sys_state.setRssi( rockblock.getRssi() );
+    state.setMessage(message);
+    state.setRssi( rockblock.getRssi() );
     if (rockblock.getSendSuccess()) {
       rockblock.toggle( false );
-      sys_state.setRockblockSleepReady( true );
+      state.setRockblockSleepReady( true );
       vTaskDelete( rockblockTaskHandle );
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
@@ -194,15 +192,14 @@ void Task_gps(void *pvParameters) {
    char bfr[32] = {};
    for(;;) {
     // waiting for a GPS fix before going to sleep
-    // TODO: add timeout if we never get one
     // TODO: this should move to the logic that triggers sleep state
-    if (sys_state.getGpsGotFix() || esp_timer_get_time()/1E6 > GPS_TIME_OUT) {
+    if (state.getGpsGotFix() || esp_timer_get_time()/1E6 > GPS_TIME_OUT) {
       Serial.println("GPS going to sleep");
       // disable GPS
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.toggle(false);
         xSemaphoreGive(mutex_i2c);
-        sys_state.setGpsDone(true);
+        state.setGpsDone(true);
         vTaskDelete( gpsTaskHandle );
       }
     } else {
@@ -217,17 +214,6 @@ void Task_gps(void *pvParameters) {
 }
 
 /*
- * Helper function that puts state values into persistent storage
- */
-void persistStateVariables() {
-  Serial.println("Storing values");
-  preferences.begin("debug", false);
-  preferences.putUInt("uptime", sys_state.getUptime());
-  preferences.end();
-}
-
-
-/*
  * Waiting for all peripherials to be in the sleep ready state.
  */
 void Task_wait_for_sleep(void *pvParameters) {
@@ -236,14 +222,14 @@ void Task_wait_for_sleep(void *pvParameters) {
   for (;;) {
     snprintf(bfr, 255,
       "Sleep ready state %d: blink %d, gps %d, rockblock %d\n",
-      sys_state.getGoToSleep(), sys_state.getBlinkSleepReady(),
-      sys_state.getGpsDone(), sys_state.getRockblockSleepReady() );
+      state.getGoToSleep(), state.getBlinkSleepReady(),
+      state.getGpsDone(), state.getRockblockSleepReady() );
     Serial.print(bfr);
     // check whether to initiate sleep
     if (
-      sys_state.getBlinkSleepReady() &&
-      sys_state.getGpsDone() &&
-      sys_state.getRockblockSleepReady()
+      state.getBlinkSleepReady() &&
+      state.getGpsDone() &&
+      state.getRockblockSleepReady()
       ) {
       Serial.println("Going to sleep");
       // Sets expander to init state which uses hopefully the least power. All
@@ -253,14 +239,17 @@ void Task_wait_for_sleep(void *pvParameters) {
         xSemaphoreGive(mutex_i2c);
       }
       // Print next send time to serial.
-      snprintf(bfr, 255, "Next send time %d -> %d\n", sys_state.getRealTime(),
-        next_send_time(sys_state.getRealTime(), 300));
+      snprintf(bfr, 255, "Next send time %d -> %d\n", state.getRealTime(),
+        next_send_time(state.getRealTime(), 300));
       // Set expected wake up time and turn display off
       // Set values that need to survive sleep but NOT a cold start
-      rtc_expected_wakeup = sys_state.getRealTime() + SLEEP_TIME;
-      sys_state.setDisplayOff( true );
+      rtc_expected_wakeup = state.getRealTime() + SLEEP_TIME;
+      state.setDisplayOff( true );
+      // Give some time to turn display off
+      // TODO: check actual state
+      vTaskDelay( pdMS_TO_TICKS(300) );
       // Store state values into persistent storage
-      persistStateVariables();
+      state.persist();
       // Give some extra time for everything to settle down.
       vTaskDelay( pdMS_TO_TICKS( 250 ) );
       esp_deep_sleep_start();
@@ -273,13 +262,13 @@ void Task_wait_for_sleep(void *pvParameters) {
 void Task_schedule(void *pvParameters) {
   bool gps_done = false;
   for (;;) {
-    gps_done = sys_state.getGpsDone();
+    gps_done = state.getGpsDone();
     if ( rockblock.getSendSuccess() )  {
       if (xSemaphoreTake(mutex_i2c, 50) == pdTRUE) {
         rockblock.toggle(false);
         xSemaphoreGive(mutex_i2c);
       }
-      sys_state.setGoToSleep(true);
+      state.setGoToSleep(true);
     }
     if ( gps_done == true && rockblock.getEnabled() ) {
       rockblock.queueMessage((char*) "Hello world!\0");
@@ -315,7 +304,7 @@ void setup() {
   // ---- Start I2C bus for peripherials ----------
   Wire.begin();
   // ---- Load state
-  sys_state.init();
+  state.init();
   // ---- Give some time to stabilize -------------
   vTaskDelay( pdTICKS_TO_MS(100) );
   // ----- Init Display
@@ -329,9 +318,10 @@ void setup() {
   // -------------------------------
 
   /*
-   * ---- Load persisted values into state --------
+   * Load persisted values into RTC memory
+   *
+   * TODO: I would rather handle that in state.h
    */
-
   if ( rtc_first_run ) {
     preferences.begin("debug", false);
     rtc_prior_uptime = preferences.getUInt("uptime", 0);
@@ -340,13 +330,27 @@ void setup() {
     Serial.print("Last uptime: "); Serial.println(rtc_prior_uptime);
   }
 
-  // ------ FreeRTOS setup ------------------------
-  // A mutex managing the use of the shared I2C bus
+  /*
+   * FreeRTOS setup
+   */
+
+  /*
+   * Mutex managing shared I2C bus.
+   *
+   * TODO: Pass the mutex as reference to the classes using it (?)
+   *
+   * For now we have to manually take it whenever we call something using I2C:
+   *
+   *  - expander: blink and GPS enable/disable
+   *  - display
+   */
   mutex_i2c = xSemaphoreCreateMutex();
 
   /*
-   * Create simple tasks (for now). We create all tasks here since some of the
-   * hardware needs to boot as well.
+   * Create and start simple tasks (for now). All components are started to
+   * grant initialization time before use.
+   *
+   * TODO: Sophisticate flow between tasks
    */
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
@@ -360,5 +364,5 @@ void setup() {
     NULL);
 }
 
-// Since we are using RTOS nothing to do here.
+// Nothing to do here, thanks to FreeRTOS.
 void loop() {}

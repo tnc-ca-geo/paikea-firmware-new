@@ -1,8 +1,8 @@
 /*
  * Class to interact with port expander mimicking Arduino port methods.
  */
-#ifndef EXPANDER
-#define EXPANDER
+#ifndef __TCA95XX_H__
+#define __TCA95XX_H__
 #include <Arduino.h>
 #include <stdint.h>
 #include <Wire.h>
@@ -32,11 +32,13 @@ class Expander {
 
 private:
     uint8_t address;
-    // get port and bit from port number
+    // Get PORT and BIT from PIN
     std::tuple<uint8_t, uint8_t> get_port_and_bit(uint8_t pin);
+    // Set a single BIT on a BYTE
     uint8_t set_bit(uint8_t old_byte, uint8_t pos, bool value);
-    // modify single value in a TC95xx register
+    // Modify a single BIT in a TC95xx REGISTER
     void modify(uint8_t addr, uint8_t pos, bool value);
+    // Read a BYTE from the Expander
     uint8_t read(uint8_t addr);
     TwoWire* wire;
 
@@ -44,6 +46,7 @@ public:
     Expander(TwoWire& i2c);
     // configure Expander with an I2C address
     void begin(uint8_t i2c_address);
+    // Set default values
     void init();
     // overload methods to be compatible with Arduino's pinMode, digitalWrite,
     // digitalRead
@@ -55,4 +58,4 @@ public:
     bool digitalRead(uint8_t port, uint8_t bit);
 };
 
-#endif
+#endif /* __TCA95XX_H__ */

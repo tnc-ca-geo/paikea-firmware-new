@@ -1,5 +1,5 @@
-#ifndef __PIN_DEFS
-#define __PIN_DEFS
+#ifndef __PINDEFS_H__
+#define __PINDEFS_H__
 
 // settings and pindefs
 #define PORT_EXPANDER_I2C_ADDRESS 0x24
@@ -53,4 +53,4 @@ ird_cts     1     6    1
 ird_rts     1     7    0
 */
 
-#endif
+#endif /* __PINDEFS_H__ */
