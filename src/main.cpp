@@ -7,10 +7,10 @@
 #include <gps.h>
 #include <display.h>
 #include <loraRockblock.h>
+#include <state.h>
 // project
 #include "pindefs.h"
 #include "helpers.h"
-#include "state.h"
 
 
 // debug flags
@@ -93,7 +93,7 @@ void Task_blink(void *pvParamaters) {
 }
 
 /*
- * Synchronize system time with GPS and re-establish "real-time" after sleep.
+ * Synchronize system time with GPS time and trigger regular time calculations.
  */
 void Task_time_sync(void *pvParameters) {
   for(;;) {
@@ -101,12 +101,10 @@ void Task_time_sync(void *pvParameters) {
     if ( gps.updated ) { state.setRealTime( gps.get_corrected_epoch(), true ); }
     // or just calculate actual time
     else state.sync();
-    Serial.print("rtc_start: "); Serial.print(rtc_start);
-    Serial.print(" realtime: "); Serial.print(state.getRealTime());
-    Serial.print(" uptime: "); Serial.println(state.getUptime());
-    // TODO: Move to GPS task.
-    state.setGpsGotFix( gps.updated );
-    vTaskDelay( pdMS_TO_TICKS( 100 ) );
+    // Serial.print("rtc_start: "); Serial.print(rtc_start);
+    // Serial.print(" realtime: "); Serial.print(state.getRealTime());
+    // Serial.print(" uptime: "); Serial.println(state.getUptime());
+    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
 
@@ -156,6 +154,8 @@ void Task_rockblock(void *pvParameters) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
+  // We do not need to rejoin unless we are using a different device. If we
+  // create a Lora class for IoT we need to rewrite anyways.
   rockblock.configure();
   rockblock.join();
   for (;;) {
@@ -193,6 +193,7 @@ void Task_gps(void *pvParameters) {
       if (gps.updated) {
         sprintf(bfr, "GPS updated: %.5f, %.5f\n", gps.lat, gps.lng);
         Serial.print(bfr);
+        state.setGpsGotFix( true );
       } else Serial.print(".");
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );

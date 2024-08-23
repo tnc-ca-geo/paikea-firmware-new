@@ -13,9 +13,9 @@ SystemState::SystemState() {}
 /*
  * Calculate next send time from current time.
  */
-time_t SystemState::next_send_time(time_t now, time_t delay) {
-    time_t full_hour = int(now/3600) * 3600;
-    uint8_t cycles = int(now % 3600/delay);
+uint64_t SystemState::next_send_time(uint64_t now, uint16_t delay) {
+    uint64_t full_hour = int(now/3600) * 3600;
+    uint16_t cycles = int(now % 3600/delay);
     return full_hour + (cycles + 1) * delay;
 }
 
@@ -187,6 +187,10 @@ uint64_t SystemState::getRealTime() {
 uint64_t SystemState::getFrequency() {
     return rtc_frequency;
 }
+
+uint64_t SystemState::getNextSendTime() {
+    return this->next_send_time( this->getRealTime(), rtc_frequency );
+};
 
 /*
  * Calculate time without new time information.

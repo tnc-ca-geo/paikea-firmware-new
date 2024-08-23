@@ -57,7 +57,7 @@ class SystemState {
         int32_t rssi;
         char message[255] = {0};
         // methods
-        time_t next_send_time(time_t now, time_t delay);
+        uint64_t next_send_time(uint64_t now, uint16_t delay);
         bool getBoolValue(bool *ref);
         bool setBoolValue(bool *ref, bool value);
         uint64_t getTimeValue(uint64_t *ref);
@@ -90,11 +90,11 @@ class SystemState {
         bool setRssi(int32_t value);
         uint64_t getPriorUptime();
         uint64_t getFrequency();
-        // bool setPriorUptime(uint64_t time);
         uint64_t getRealTime();
+        uint64_t getNextSendTime();
         // sync with new actual time information
         bool setRealTime(uint64_t time, bool gps=false);
-        // sync before time fix is available
+        // sync all time values, implicitely called by setRealTime()
         bool sync();
         uint64_t getUptime();
         // bool setUptime(uint64_t time);

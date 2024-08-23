@@ -25,12 +25,6 @@ uint16_t parseValue(char *bfr, char *valuePrefix, size_t len, char end) {
     return 0;
 }
 
-
-LoraRockblock::LoraRockblock(Expander &expander, HardwareSerial &serial) {
-    this->expander = &expander;
-    this->serial = &serial;
-}
-
 /*
  * Match two buffers, used to parse Serial return.
  */
@@ -39,6 +33,12 @@ bool LoraRockblock::matchBuffer(char* bfr, char* needle, size_t len) {
     s = strstr(bfr, needle);
     if ( strstr(bfr, needle) != NULL ) return true;
     return false;
+}
+
+
+LoraRockblock::LoraRockblock(Expander &expander, HardwareSerial &serial) {
+    this->expander = &expander;
+    this->serial = &serial;
 }
 
 /*
@@ -50,6 +50,7 @@ bool LoraRockblock::sendAndReceive(char *command, char *bfr) {
         Serial.print(command);
         vTaskDelay( pdMS_TO_TICKS( 50 ));
         this->readResponse(bfr);
+        Serial.println(bfr);
         return true;
     }
     return false;
@@ -135,6 +136,11 @@ bool LoraRockblock::queueMessage(char *bfr, size_t len) {
 
 
 bool LoraRockblock::available() {
+    Serial.print("LORA STATUS: ");
+    Serial.print("joining "); Serial.print(this->joining);
+    Serial.print(" sending "); Serial.print(this->sending);
+    Serial.print(" command waiting "); Serial.print(this->commandWaiting);
+    Serial.print(" enabled "); Serial.println(this->enabled);
     return (
         !(this->joining || this->sending || this->commandWaiting) &&
         this->enabled);
@@ -257,6 +263,7 @@ void LoraRockblock::loop() {
     // Parse serial response and issue events
     this->parseResponse(responseBuffer);
 
+    Serial.print("EVENT: "); Serial.println(event);
     // Update state
     switch(event) {
 
