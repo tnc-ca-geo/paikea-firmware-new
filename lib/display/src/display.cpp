@@ -28,7 +28,7 @@ void LilyGoDisplay::set(char *bfr) {
 void LilyGoDisplay::off() {
   this->displ.clearDisplay();
   this->displ.display();
-};
+}
 
 void LilyGoDisplay::loop() {
 }

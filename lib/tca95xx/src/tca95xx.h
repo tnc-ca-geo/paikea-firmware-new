@@ -38,7 +38,7 @@ private:
     uint8_t set_bit(uint8_t old_byte, uint8_t pos, bool value);
     // Modify a single BIT in a TC95xx REGISTER
     void modify(uint8_t addr, uint8_t pos, bool value);
-    // Read a BYTE from the Expander
+    // Read a BYTE from the expander
     uint8_t read(uint8_t addr);
     TwoWire* wire;
 

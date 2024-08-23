@@ -14,7 +14,6 @@ int runUnityTests() {
 }
 
 void setup() {
-    delay(1000);
     runUnityTests();
 }
 

@@ -9,7 +9,6 @@
 #define ROCKBLOCK_SERIAL_TX_PIN 25
 #define ROCKBLOCK_SERIAL_SPEED 115200
 #define NUM_TIMERS 1
-#define uS_TO_S_FACTOR 1000000
 #define SLEEP_TIME 300
 #define WAKE_TIME 60
 // time before we decide that we won't get a fix

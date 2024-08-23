@@ -19,6 +19,15 @@
 #include <Preferences.h>
 
 
+inline RTC_DATA_ATTR time_t rtc_start = 0;
+inline RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
+inline RTC_DATA_ATTR time_t rtc_prior_uptime = 0;
+inline RTC_DATA_ATTR time_t rtc_frequency = 300;
+inline RTC_DATA_ATTR bool rtc_first_fix = true;
+inline RTC_DATA_ATTR bool rtc_first_run = true;
+
+
+
 class SystemState {
 
     private:
@@ -31,9 +40,12 @@ class SystemState {
          * Glue devices. So don't relay on this too much.
          */
         Preferences preferences;
-        uint64_t real_time;
-        uint64_t prior_uptime;
-        uint64_t uptime;
+        uint64_t real_time = 0;
+        uint64_t prior_uptime = 0;
+        uint64_t uptime = 0;
+        // system time when time was last updated from a real time reading
+        uint64_t time_read_system_time = 0;
+        // uint16_t frequency = 300;
         bool go_to_sleep;
         bool gps_done;
         bool gps_got_fix;
@@ -45,6 +57,7 @@ class SystemState {
         int32_t rssi;
         char message[255] = {0};
         // methods
+        time_t next_send_time(time_t now, time_t delay);
         bool getBoolValue(bool *ref);
         bool setBoolValue(bool *ref, bool value);
         uint64_t getTimeValue(uint64_t *ref);
@@ -72,15 +85,20 @@ class SystemState {
         bool setMessage(char *bfr);
         bool getRockblockSleepReady();
         bool setRockblockSleepReady(bool value);
+        bool getSystemSleepReady();
         int32_t getRssi();
         bool setRssi(int32_t value);
         uint64_t getPriorUptime();
-        bool setPriorUptime(uint64_t time);
+        uint64_t getFrequency();
+        // bool setPriorUptime(uint64_t time);
         uint64_t getRealTime();
-        bool setRealTime(uint64_t time);
+        // sync with new actual time information
+        bool setRealTime(uint64_t time, bool gps=false);
+        // sync before time fix is available
+        bool sync();
         uint64_t getUptime();
-        bool setUptime(uint64_t time);
-        // sleep writes some state variables into persistent storage
+        // bool setUptime(uint64_t time);
+        // write variables that should survive sleep or power off
         bool persist();
 };
 

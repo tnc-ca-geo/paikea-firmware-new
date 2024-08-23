@@ -1,5 +1,6 @@
 #include <gps.h>
 
+
 const uint8_t BUFFER_SIZE = 255;
 
 
@@ -45,6 +46,11 @@ void Gps::loop() {
         this->updated = true;
     } else this->updated = false;
 }
+
+uint64_t Gps::get_corrected_epoch() {
+    return this->epoch + (
+        esp_timer_get_time() - this->gps_read_system_time )/1E6;
+};
 
 /*
  * Read one line from the GPS and store into buffer. This is currently unused

@@ -21,13 +21,16 @@ private:
 public:
     // Variables
     time_t epoch = 0;
-    uint64_t gps_read_system_time = 0xFFFFFFFFFFFFFFFF;
+    // Time when GPS was read, to correct for delayed processing.
+    uint64_t gps_read_system_time = 0; //0xFFFFFFFFFFFFFFFF;
     bool updated = false;
     float lat;
     float lng;
     // Constructor
     Gps(Expander &expander, HardwareSerial &serial);
     // Methods
+    // Return epoch corrected by the time passed since last GPS read.
+    uint64_t get_corrected_epoch();
     void enable();
     void disable();
     void loop();

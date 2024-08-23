@@ -118,6 +118,7 @@ void LoraRockblock::join() {
 bool LoraRockblock::queueMessage(char *bfr, size_t len) {
     size_t i=0;
     if (!messageInQueue) {
+        Serial.println("Message queued!");
         for (i; i<len; i++) {
             this->outGoingMessage[i] = bfr[i];
             if (bfr[i] == 0) { break; }
@@ -170,6 +171,8 @@ void LoraRockblock::readResponse(char *buffer) {
         buffer[idx] = this->serial->read();
         if (idx > 254) {
             Serial.println("Read buffer overflow!");
+            // TODO: check whether that makes sense
+            idx=0;
         } else idx++;
     }
     buffer[idx] = 0;

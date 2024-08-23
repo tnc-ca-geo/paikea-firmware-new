@@ -1,10 +1,43 @@
+/*
+ * The system state holds variables that are used by different components of the
+ * system and shared between tasks. For this reason there are mutexes on the
+ * setters and getters (TODO: check whether we need mutexes on getters.)
+ */
 #include <state.h>
 #define WAIT pdMS_TO_TICKS(50)
 
 
 SystemState::SystemState() {}
 
-// Find SystemState::init below since it correspondents with ::persist
+
+/*
+ * Calculate next send time from current time.
+ */
+time_t SystemState::next_send_time(time_t now, time_t delay) {
+    time_t full_hour = int(now/3600) * 3600;
+    uint8_t cycles = int(now % 3600/delay);
+    return full_hour + (cycles + 1) * delay;
+}
+
+
+/*
+ * Initialize state from stored values.
+ */
+bool SystemState::init() {
+    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
+        if (rtc_first_run) {
+            preferences.begin("debug", false);
+            rtc_prior_uptime = preferences.getUInt("uptime", 0);
+            preferences.end();
+            rtc_first_run = false;
+            Serial.print("Last uptime: "); Serial.println(rtc_prior_uptime);
+        }
+        this->real_time = rtc_expected_wakeup;
+        this->time_read_system_time = esp_timer_get_time()/1E6;
+        xSemaphoreGive( this->mutex );
+        return true;
+    } else return false;
+}
 
 
 bool SystemState::getBoolValue(bool *ref) {
@@ -67,11 +100,9 @@ bool SystemState::setIntegerValue(int32_t *ref, int32_t value) {
 size_t SystemState::getBuffer(char *ref, char *outBfr) {
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         const size_t size = strlen(ref);
-        // Serial.print("Size "); Serial.println(size);
         memcpy(outBfr, ref, size);
         xSemaphoreGive( this->mutex );
         outBfr[size] = 0;
-        // Serial.print("OUT "); Serial.print(outBfr); Serial.println();
         return size;
     }
     return 0;
@@ -153,20 +184,42 @@ uint64_t SystemState::getRealTime() {
     return this->getTimeValue( &this->real_time );
 }
 
+uint64_t SystemState::getFrequency() {
+    return rtc_frequency;
+}
 
-bool SystemState::setRealTime(uint64_t time) {
-    return this->setTimeValue( &this->real_time, time );
+/*
+ * Calculate time without new time information.
+ */
+bool SystemState::sync() {
+    uint64_t set_time = esp_timer_get_time()/1E6;
+    uint64_t time =
+        this->real_time + set_time - this->time_read_system_time;
+    return (this->setTimeValue(&this->real_time, time)
+        && this->setTimeValue(&this->time_read_system_time, set_time));
+}
+
+/*
+ * Sync all time values with new actual time information.
+ */
+bool SystemState::setRealTime(uint64_t time, bool gps) {
+    this->setTimeValue( &this->time_read_system_time, esp_timer_get_time()/1E6);
+    if (gps && rtc_first_fix) {
+        rtc_start = time - esp_timer_get_time()/1E6;
+        rtc_first_fix = false;
+    }
+    // setting real time to new value and sync all other time values
+    return this->setTimeValue( &this->real_time, time ) && this->sync();
 }
 
 
 uint64_t SystemState::getUptime() {
-    return this->getTimeValue( &this->uptime );
+    return this->getTimeValue( &this->real_time ) - rtc_start;
 }
 
-
-bool SystemState::setUptime(uint64_t time) {
+/* bool SystemState::setUptime(uint64_t time) {
     return this->setTimeValue( &this->uptime, time );
-}
+}*/
 
 int32_t SystemState::getRssi() {
     return this->getIntegerValue( &this->rssi );
@@ -187,21 +240,14 @@ bool SystemState::setMessage(char *bfr) {
     return this->setBuffer(this->message, bfr);
 }
 
-/*
- * Initialize state from stored values, currently uptime is read into rtc
- * memory that is not managed by this class.
- *
- * TODO: Clean up. Load all vars into state during runtime.
- */
-bool SystemState::init() {
-    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
-        preferences.begin("debug", false);
-        // add variables to restore
-        preferences.end();
-        xSemaphoreGive( this->mutex );
-        return true;
-    } else return false;
+
+bool SystemState::getSystemSleepReady() {
+    return (
+        this->blink_sleep_ready && this->gps_done &&
+        this->rockblock_sleep_ready);
 }
+
+uint64_t SystemState::getPriorUptime() { return rtc_prior_uptime; }
 
 /*
  * Write variables to peristent storage using preferences.h. Since it uses
@@ -210,10 +256,11 @@ bool SystemState::init() {
 bool SystemState::persist() {
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         preferences.begin("debug", false);
-        // add all variables that need to be persisted here, use sparengly
+        // add all variables that need to be persisted
         preferences.putUInt("uptime", this->uptime);
         preferences.end();
         xSemaphoreGive( this->mutex );
         return true;
     } else return false;
+    rtc_expected_wakeup = this->next_send_time(this->real_time, rtc_frequency);
 }
