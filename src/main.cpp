@@ -259,20 +259,6 @@ void Task_schedule(void *pvParameters) {
 }
 
 
-/*
- * This task generates a regular message and will not be used in normal
- * operation, where message generation relays on successful GPS reading.
- */
-void Task_send_message(void *pvParameters) {
-  for (;;) {
-    if (rockblock.queueMessage((char*) "Hello world!\0")) {
-      Serial.println("\nSending message");
-    } else Serial.println("Rockblock busy");
-    vTaskDelay( pdMS_TO_TICKS( 30 * 1000 ) );
-  }
-}
-
-
 void setup() {
   // ---- Start Serial for debugging --------------
   Serial.begin(115200);
