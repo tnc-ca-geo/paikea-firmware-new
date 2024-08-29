@@ -31,7 +31,7 @@ class LoraRockblock {
         int16_t lastSnr = 0;
         // ----- Private methods -----
         /* Compose a message AT command including encoding */
-        size_t parseMessage(char *bfr);
+        void parseMessage(char *bfr);
         void readResponse(char *buffer);
         void sendAT(char *command, char *bfr);
         bool sendAndCheckAT(char *command, char *bfr, char *expected);

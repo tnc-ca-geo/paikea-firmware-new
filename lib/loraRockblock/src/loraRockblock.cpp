@@ -154,13 +154,12 @@ bool LoraRockblock::getSendSuccess() {
 }
 
 // parse message from buffer
-size_t LoraRockblock::parseMessage(char *bfr) {
+void LoraRockblock::parseMessage(char *bfr) {
     char *s;
     char numberString[3] = {0};
     size_t len = 0;
     s = strstr(bfr, (char*) "OK+RECV:");
     if (s != NULL) {
-        Serial.print("HERE: ");
         memcpy(numberString, s+14, 2);
         len = std::stoi(numberString, 0, 16);
         for (size_t i=0; i<len; i++) {
@@ -168,10 +167,7 @@ size_t LoraRockblock::parseMessage(char *bfr) {
             this->lastMessage[i] = std::stoi(numberString, 0, 16);
         }
         this->lastMessage[len] = 0;
-        return len;
     }
-    this->lastMessage[0] = 0;
-    return 0;
 }
 
 /*
