@@ -160,23 +160,21 @@ bool SystemState::setGpsDone(bool value) {
 }
 
 
-bool SystemState::getGpsGotFix() {
-    return this->getBoolValue( &this->gps_got_fix );
+bool SystemState::getRockblockDone() {
+    return this->getBoolValue( &this->rockblock_done );
 }
 
 
-bool SystemState::setGpsGotFix(bool value) {
-    return this->setBoolValue( &this->gps_got_fix, value );
+bool SystemState::setRockblockDone(bool value) {
+    return this->setBoolValue( &this->rockblock_done, value );
 }
 
-
-bool SystemState::getRockblockSleepReady() {
-    return this->getBoolValue( &this->rockblock_sleep_ready );
+bool SystemState::getMessageSent() {
+    return this->getBoolValue( &this->message_sent );
 }
 
-
-bool SystemState::setRockblockSleepReady(bool value) {
-    return this->setBoolValue( &this->rockblock_sleep_ready, value );
+bool SystemState::setMessageSent(bool value) {
+    return this->setBoolValue( &this->message_sent, value );
 }
 
 
@@ -248,7 +246,7 @@ bool SystemState::setMessage(char *bfr) {
 bool SystemState::getSystemSleepReady() {
     return (
         this->blink_sleep_ready && this->gps_done &&
-        this->rockblock_sleep_ready);
+        this->rockblock_done);
 }
 
 uint64_t SystemState::getPriorUptime() { return rtc_prior_uptime; }

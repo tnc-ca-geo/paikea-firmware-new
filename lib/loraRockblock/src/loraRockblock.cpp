@@ -88,7 +88,6 @@ bool LoraRockblock::configure() {
 
 
 void LoraRockblock::beginJoin() {
-    Serial.println("----- Initiate join ----");
     char command[] = "AT+CJOIN=1,1,8,16\r";
     this->serial->write(command);
 }
@@ -142,6 +141,9 @@ int32_t LoraRockblock::getRssi() {
     return this->lastRssi;
 }
 
+/*
+ * Getter for last message.
+ */
 size_t LoraRockblock::getLastMessage(char *bfr) {
     size_t len = strlen(this->lastMessage);
     memcpy(bfr, this->lastMessage, len);
@@ -153,7 +155,9 @@ bool LoraRockblock::getSendSuccess() {
     return this->sendSuccess;
 }
 
-// parse message from buffer
+/*
+ * Parse incoming message LoraWAN message.
+ */
 void LoraRockblock::parseMessage(char *bfr) {
     char *s;
     char numberString[3] = {0};
@@ -171,10 +175,10 @@ void LoraRockblock::parseMessage(char *bfr) {
 }
 
 /*
- * Parse serial response into state.
+ * Parse serial response from ASR6501 into class state. This is incomplete and
+ * should be extended as needed.
  */
 void LoraRockblock::parseState(char *bfr) {
-    //Serial.print("bfr -> "); Serial.println(bfr);
     parseInteger(bfr, (char*) "+CSTATUS:", 9, this->status);
     parseBool(bfr, (char*) "+CJOIN:OK", this->joinOk);
     parseBool(bfr, (char*) "+CJOIN:FAIL", this->joinFailure);
@@ -182,7 +186,7 @@ void LoraRockblock::parseState(char *bfr) {
 }
 
 /*
- * Read and parse serial.
+ * Read serial and invoke parser.
  */
 void LoraRockblock::readSerial() {
     size_t idx = 0;
@@ -197,6 +201,10 @@ void LoraRockblock::readSerial() {
     }
 }
 
+
+/*
+ * Update state and correct inconsistencies.
+ */
 void LoraRockblock::updateStateLogic() {
     if ( this->joinOk ) this->joinFailure = false;
     if ( this->joinFailure ) this->joinOk = false;
@@ -205,14 +213,20 @@ void LoraRockblock::updateStateLogic() {
     } else this->sendSuccess = false;
  }
 
+/*
+ * Loop to be called in task. It does three things for now:
+ *  - read and parse serial
+ *  - update the state logic
+ *  - and send a state check command (incomplete, we could add link checks here)
+ */
 void LoraRockblock::loop() {
     this->readSerial();
     this->updateStateLogic();
-    Serial.print("Status: "); Serial.println(this->status);
-    Serial.print("Join ok: "); Serial.println(this->joinOk);
-    Serial.print("Join failure: "); Serial.println(this->joinFailure);
-    Serial.print("Send success: "); Serial.println(this->sendSuccess);
-    Serial.print("Last incoming: "); Serial.println(this->lastMessage);
+    Serial.print("Status: "); Serial.print(this->status);
+    // Serial.print(", Join ok: "); Serial.print(this->joinOk);
+    // Serial.print(", Join failure: "); Serial.print(this->joinFailure);
+    Serial.print(", send success: "); Serial.print(this->sendSuccess);
+    Serial.print(", last incoming: "); Serial.println(this->lastMessage);
     this->serial->write("AT+CSTATUS?\r");
 }
 

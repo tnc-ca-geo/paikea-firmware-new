@@ -82,12 +82,3 @@ time_t Gps::time_to_epoch(TinyGPSDate date, TinyGPSTime time) {
     t.tm_sec = time.second();
     return mktime(&t);
 }
-
-
-void Gps::toggle(bool gps_on) {
-    if (gps_on) {
-        this->enable();
-    } else {
-        this->disable();
-    }
-}

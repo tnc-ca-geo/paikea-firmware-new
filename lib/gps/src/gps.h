@@ -35,8 +35,6 @@ public:
     void disable();
     void loop();
     void readln(char *buffer);
-    // turn GPS on or off
-    void toggle(bool gps_on);
 };
 
 #endif /* __GPS_H__ */

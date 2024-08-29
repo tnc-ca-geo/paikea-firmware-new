@@ -19,6 +19,10 @@
 #include <Preferences.h>
 
 
+/*
+ * This variables will be persisted during deep sleep using slow RTC memory
+ * but cleared upon reset.
+ */
 inline RTC_DATA_ATTR time_t rtc_start = 0;
 inline RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
 inline RTC_DATA_ATTR time_t rtc_prior_uptime = 0;
@@ -27,17 +31,14 @@ inline RTC_DATA_ATTR bool rtc_first_fix = true;
 inline RTC_DATA_ATTR bool rtc_first_run = true;
 
 
-
 class SystemState {
 
     private:
         SemaphoreHandle_t mutex=xSemaphoreCreateMutex();
         /*
          * Use Preferences for persistent data storage and debugging when fully
-         * powered off. The Preferences library supposedly manages limited
-         * number of write write cycles to this kind of storage. Which is
-         * certainly not an issue with Scout but might be an issue with the
-         * Glue devices. So don't relay on this too much.
+         * powered off. The Preferences library manages the limited number of
+         * write cycles for this kind of storage.
          */
         Preferences preferences;
         uint64_t real_time = 0;
@@ -46,17 +47,17 @@ class SystemState {
         // system time when time was last updated from a real time reading
         uint64_t time_read_system_time = 0;
         // uint16_t frequency = 300;
-        bool go_to_sleep;
-        bool gps_done;
-        bool gps_got_fix;
-        bool blink_sleep_ready;
-        bool expander_sleep_ready;
-        bool display_off;
-        bool rockblock_sleep_ready;
-        bool send_success;
+        bool go_to_sleep =0;
+        bool gps_done = 0;
+        bool message_sent = 0;
+        bool blink_sleep_ready; // TODO: remove
+        bool expander_sleep_ready; // TODO: remove
+        bool display_off; // TODO: remove
+        bool rockblock_done = 0;
+        bool send_success; // TODO: remove
         int32_t rssi;
         char message[255] = {0};
-        // methods
+        // private methods
         uint64_t next_send_time(uint64_t now, uint16_t delay);
         bool getBoolValue(bool *ref);
         bool setBoolValue(bool *ref, bool value);
@@ -79,13 +80,13 @@ class SystemState {
         bool setGoToSleep(bool value);
         bool getGpsDone();
         bool setGpsDone(bool value);
-        bool getGpsGotFix();
-        bool setGpsGotFix(bool value);
         size_t getMessage(char *bfr);
         bool setMessage(char *bfr);
-        bool getRockblockSleepReady();
-        bool setRockblockSleepReady(bool value);
+        bool getRockblockDone();
+        bool setRockblockDone(bool value);
         bool getSystemSleepReady();
+        bool getMessageSent();
+        bool setMessageSent(bool value);
         int32_t getRssi();
         bool setRssi(int32_t value);
         uint64_t getPriorUptime();
