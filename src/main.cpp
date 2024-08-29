@@ -149,7 +149,6 @@ void Task_display(void *pvParameters) {
  * re-joining.
  */
 void Task_rockblock(void *pvParameters) {
-  char message[255] = {0};
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
@@ -157,18 +156,10 @@ void Task_rockblock(void *pvParameters) {
   // We do not need to rejoin unless we are using a different device. If we
   // create a Lora class for IoT we need to rewrite anyways.
   rockblock.configure();
-  rockblock.join();
+  rockblock.beginJoin();
   for (;;) {
     rockblock.loop();
-    rockblock.getLastMessage(message);
-    state.setMessage(message);
-    state.setRssi( rockblock.getRssi() );
-    if (rockblock.getSendSuccess()) {
-      rockblock.toggle( false );
-      state.setRockblockSleepReady( true );
-      vTaskDelete( rockblockTaskHandle );
-    }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    vTaskDelay( pdMS_TO_TICKS( 500 ) );
   }
 }
 
@@ -242,6 +233,17 @@ void Task_wait_for_sleep(void *pvParameters) {
   }
 }
 
+
+void Task_message(void *pvParameters) {
+  for (;;) {
+    Serial.println("----- Send message -----");
+    if ( rockblock.available() ) {
+      rockblock.sendMessage((char*) "Hello world!\0");
+    }
+    vTaskDelay( pdMS_TO_TICKS( 10000 ) );
+  }
+}
+
 void Task_schedule(void *pvParameters) {
   for (;;) {
     if ( rockblock.getSendSuccess() )  {
@@ -251,8 +253,8 @@ void Task_schedule(void *pvParameters) {
       }
       state.setGoToSleep(true);
     }
-    if ( state.getGpsDone() == true && rockblock.getEnabled() ) {
-      rockblock.queueMessage((char*) "Hello world!\0");
+    if ( state.getGpsDone() == true ) {
+      rockblock.sendMessage((char*) "Hello world!\0");
     }
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
   }
@@ -311,7 +313,8 @@ void setup() {
   xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10,
     &timeSyncTaskHandle);
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
-  xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
+  // xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
+  xTaskCreate(&Task_message, "Task message", 4096, NULL, 14, NULL);
   xTaskCreate(&Task_rockblock, "Task Rockblock", 4096, NULL, 10,
     &rockblockTaskHandle);
   xTaskCreate(&Task_wait_for_sleep, "Task wait for sleep", 4096, NULL, 13,

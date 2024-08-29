@@ -24,42 +24,41 @@ class LoraRockblock {
         HardwareSerial* serial;
         Expander *expander;
         // State variables
-        bool commandWaiting = false;
         bool enabled = false;
-        uint8_t event = NOEVENT;
-        bool joining = false;
         int16_t lastDr = 0;
         char lastMessage[255] = {0};
         int16_t lastRssi = 0;
         int16_t lastSnr = 0;
-        bool messageInQueue = false;
-        char nextCommand[512] = {0};
-        char outGoingMessage[255] = {0};
-        bool sending = false;
         // ----- Private methods -----
-        /* Check whether we can initiate commands */
-        bool available();
         /* Compose a message AT command including encoding */
-        void createMessageCommand();
-        bool matchBuffer(char *haystack, char *needle, size_t len=255);
         size_t parseMessage(char *bfr);
-        void parseResponse(char *bfr);
         void readResponse(char *buffer);
-        char responseBuffer[255] = {0};
-        bool sendAndReceive(char *command, char *bfr);
-        bool sendAndReceive(char *command, char *bfr, char *expected);
+        void sendAT(char *command, char *bfr);
+        bool sendAndCheckAT(char *command, char *bfr, char *expected);
+        // new status variables
+        uint32_t status = 0;
+        bool joinOk = false;
+        bool joinFailure = false;
         bool sendSuccess = false;
+        // new methods
+        // read serial and parse state
+        void readSerial();
+        void parseState(char *buffer);
+        // update state logic by overwritting state variables
+        // when newer information available
+        void updateStateLogic();
+
     public:
         LoraRockblock(Expander &expander, HardwareSerial &serial);
-        void join();
+        /* Check whether we can initiate commands */
+        bool available();
+        void beginJoin();
         bool configure();
-        bool getEnabled();
         int32_t getRssi();
         size_t getLastMessage(char *bfr);
         bool getSendSuccess();
         void loop();
-        // Use to send message in main program
-        bool queueMessage(char *buffer, size_t len=255);
+        void sendMessage(char *buffer, size_t len=255);
         void toggle(bool on);
 };
 
