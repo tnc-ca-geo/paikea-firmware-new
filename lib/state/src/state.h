@@ -41,11 +41,11 @@ class SystemState {
          * write cycles for this kind of storage.
          */
         Preferences preferences;
-        uint64_t real_time = 0;
-        uint64_t prior_uptime = 0;
-        uint64_t uptime = 0;
+        time_t real_time = 0;
+        time_t prior_uptime = 0;
+        time_t uptime = 0;
         // system time when time was last updated from a real time reading
-        uint64_t time_read_system_time = 0;
+        time_t time_read_system_time = 0;
         // uint16_t frequency = 300;
         bool go_to_sleep =0;
         bool gps_done = 0;
@@ -61,11 +61,11 @@ class SystemState {
         int32_t rssi;
         char message[255] = {0};
         // private methods
-        uint64_t next_send_time(uint64_t now, uint16_t delay);
+        time_t next_send_time(time_t now, uint16_t delay);
         bool getBoolValue(bool *ref);
         bool setBoolValue(bool *ref, bool value);
-        uint64_t getTimeValue(uint64_t *ref);
-        bool setTimeValue(uint64_t *ref, uint64_t value);
+        time_t getTimeValue(time_t *ref);
+        bool setTimeValue(time_t *ref, time_t value);
         bool setIntegerValue(int32_t *ref, int32_t value);
         size_t getBuffer(char *ref, char *outBfr);
         bool setBuffer(char *ref, char *inBfr);
@@ -95,16 +95,16 @@ class SystemState {
         float getLatitude();
         int32_t getRssi();
         bool setRssi(int32_t value);
-        uint64_t getPriorUptime();
-        uint64_t getWakeupTime();
-        uint64_t getFrequency();
-        uint64_t getRealTime();
-        uint64_t getNextSendTime();
+        time_t getPriorUptime();
+        time_t getWakeupTime();
+        time_t getFrequency();
+        time_t getRealTime();
+        time_t getNextSendTime();
         // sync with new actual time information
-        bool setRealTime(uint64_t time, bool gps=false);
+        bool setRealTime(time_t time, bool gps=false);
         // sync all time values, implicitely called by setRealTime()
         bool sync();
-        uint64_t getUptime();
+        time_t getUptime();
         // bool setUptime(uint64_t time);
         // write variables that should survive sleep or power off
         bool persist();

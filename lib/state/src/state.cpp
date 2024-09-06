@@ -13,8 +13,8 @@ SystemState::SystemState() {}
 /*
  * Calculate next send time from current time.
  */
-uint64_t SystemState::next_send_time(uint64_t now, uint16_t delay) {
-    uint64_t full_hour = int(now/3600) * 3600;
+time_t SystemState::next_send_time(time_t now, uint16_t delay) {
+    time_t full_hour = int(now/3600) * 3600;
     uint16_t cycles = int(now % 3600/delay);
     return full_hour + (cycles + 1) * delay;
 }
@@ -60,8 +60,8 @@ bool SystemState::setBoolValue(bool *ref, bool value) {
 }
 
 
-uint64_t SystemState::getTimeValue(uint64_t *ref) {
-    uint64_t ret = 0;
+time_t SystemState::getTimeValue(time_t *ref) {
+    time_t ret = 0;
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         ret = *ref;
         xSemaphoreGive( this->mutex );
@@ -70,7 +70,7 @@ uint64_t SystemState::getTimeValue(uint64_t *ref) {
 }
 
 
-bool SystemState::setTimeValue(uint64_t *ref, uint64_t value) {
+bool SystemState::setTimeValue(time_t *ref, time_t value) {
     if ( xSemaphoreTake( this->mutex, WAIT ) == pdTRUE ) {
         *ref = value;
         xSemaphoreGive( this->mutex );
@@ -168,13 +168,13 @@ bool SystemState::setMessageSent(bool value) {
     return this->setBoolValue( &this->message_sent, value );
 }
 
-uint64_t SystemState::getRealTime() {
+time_t SystemState::getRealTime() {
     return this->getTimeValue( &this->real_time );
 }
 
-uint64_t SystemState::getFrequency() { return rtc_frequency; }
+time_t SystemState::getFrequency() { return rtc_frequency; }
 
-uint64_t SystemState::getNextSendTime() {
+time_t SystemState::getNextSendTime() {
     return next_send_time( this->getRealTime(), rtc_frequency );
 };
 
@@ -189,8 +189,8 @@ float SystemState::getLongitude() { return this->lng; }
  * Calculate time without new time information.
  */
 bool SystemState::sync() {
-    uint64_t set_time = esp_timer_get_time()/1E6;
-    uint64_t time =
+    time_t set_time = esp_timer_get_time()/1E6;
+    time_t time =
         this->real_time + set_time - this->time_read_system_time;
     return (this->setTimeValue(&this->real_time, time)
         && this->setTimeValue(&this->time_read_system_time, set_time));
@@ -199,7 +199,7 @@ bool SystemState::sync() {
 /*
  * Sync all time values with new actual time information.
  */
-bool SystemState::setRealTime(uint64_t time, bool gps) {
+bool SystemState::setRealTime(time_t time, bool gps) {
     this->setTimeValue( &this->time_read_system_time, esp_timer_get_time()/1E6);
     if (gps && rtc_first_fix) {
         rtc_start = time - esp_timer_get_time()/1E6;
@@ -210,7 +210,7 @@ bool SystemState::setRealTime(uint64_t time, bool gps) {
 }
 
 
-uint64_t SystemState::getUptime() { return this->real_time - rtc_start; }
+time_t SystemState::getUptime() { return this->real_time - rtc_start; }
 
 int32_t SystemState::getRssi() { return this->rssi; }
 
@@ -234,9 +234,9 @@ bool SystemState::getSystemSleepReady() {
     return this->blink_sleep_ready && this->gps_done && this->rockblock_done;
 }
 
-uint64_t SystemState::getPriorUptime() { return rtc_prior_uptime; }
+time_t SystemState::getPriorUptime() { return rtc_prior_uptime; }
 
-uint64_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
+time_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
 
 /*
  * Write variables to peristent storage using preferences.h. Since it uses
