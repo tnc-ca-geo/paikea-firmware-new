@@ -24,7 +24,7 @@
  * but cleared upon reset.
  */
 inline RTC_DATA_ATTR time_t rtc_start = 0;
-inline RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
+inline RTC_DATA_ATTR uint64_t rtc_expected_wakeup = 0;
 inline RTC_DATA_ATTR time_t rtc_prior_uptime = 0;
 inline RTC_DATA_ATTR time_t rtc_frequency = 300;
 inline RTC_DATA_ATTR bool rtc_first_fix = true;
@@ -55,6 +55,9 @@ class SystemState {
         bool display_off; // TODO: remove
         bool rockblock_done = 0;
         bool send_success; // TODO: remove
+        // Setting no value into coordinates, to indicate if GPS is not working.
+        float lat=999;
+        float lng=999;
         int32_t rssi;
         char message[255] = {0};
         // private methods
@@ -63,7 +66,6 @@ class SystemState {
         bool setBoolValue(bool *ref, bool value);
         uint64_t getTimeValue(uint64_t *ref);
         bool setTimeValue(uint64_t *ref, uint64_t value);
-        int32_t getIntegerValue(int32_t *ref);
         bool setIntegerValue(int32_t *ref, int32_t value);
         size_t getBuffer(char *ref, char *outBfr);
         bool setBuffer(char *ref, char *inBfr);
@@ -87,9 +89,14 @@ class SystemState {
         bool getSystemSleepReady();
         bool getMessageSent();
         bool setMessageSent(bool value);
+        void setLongitude(float value);
+        float getLongitude();
+        void setLatitude(float value);
+        float getLatitude();
         int32_t getRssi();
         bool setRssi(int32_t value);
         uint64_t getPriorUptime();
+        uint64_t getWakeupTime();
         uint64_t getFrequency();
         uint64_t getRealTime();
         uint64_t getNextSendTime();

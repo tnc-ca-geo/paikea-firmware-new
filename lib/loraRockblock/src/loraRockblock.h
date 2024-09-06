@@ -38,6 +38,9 @@ class LoraRockblock {
         // new status variables
         uint32_t status = 0;
         bool joinOk = false;
+        // we need to make sure that we don't catch the send success of join
+        // messages, update sendSuccess only if we actually sending
+        bool sending = false;
         bool joinFailure = false;
         bool sendSuccess = false;
         // new methods

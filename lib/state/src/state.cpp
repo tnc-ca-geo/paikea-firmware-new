@@ -4,7 +4,7 @@
  * setters and getters (TODO: check whether we need mutexes on getters.)
  */
 #include <state.h>
-#define WAIT pdMS_TO_TICKS(50)
+#define WAIT pdMS_TO_TICKS(300)
 
 
 SystemState::SystemState() {}
@@ -31,6 +31,7 @@ bool SystemState::init() {
             preferences.end();
             rtc_first_run = false;
             Serial.print("Last uptime: "); Serial.println(rtc_prior_uptime);
+            rtc_expected_wakeup = 0;
         }
         this->real_time = rtc_expected_wakeup;
         this->time_read_system_time = esp_timer_get_time()/1E6;
@@ -75,16 +76,6 @@ bool SystemState::setTimeValue(uint64_t *ref, uint64_t value) {
         xSemaphoreGive( this->mutex );
         return true;
     } else return false;
-}
-
-
-int32_t SystemState::getIntegerValue(int32_t *ref) {
-    int32_t ret = 0;
-    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
-        ret = *ref;
-        xSemaphoreGive( this->mutex );
-        return ret;
-    } else return 0;
 }
 
 
@@ -177,18 +168,22 @@ bool SystemState::setMessageSent(bool value) {
     return this->setBoolValue( &this->message_sent, value );
 }
 
-
 uint64_t SystemState::getRealTime() {
     return this->getTimeValue( &this->real_time );
 }
 
-uint64_t SystemState::getFrequency() {
-    return rtc_frequency;
-}
+uint64_t SystemState::getFrequency() { return rtc_frequency; }
 
 uint64_t SystemState::getNextSendTime() {
-    return this->next_send_time( this->getRealTime(), rtc_frequency );
+    return next_send_time( this->getRealTime(), rtc_frequency );
 };
+
+// should be atomic
+void SystemState::setLatitude(float value) { this->lat = value; }
+float SystemState::getLatitude() { return this->lat; }
+// should be atomic
+void SystemState::setLongitude(float value) { this->lng = value; }
+float SystemState::getLongitude() { return this->lng; }
 
 /*
  * Calculate time without new time information.
@@ -215,17 +210,9 @@ bool SystemState::setRealTime(uint64_t time, bool gps) {
 }
 
 
-uint64_t SystemState::getUptime() {
-    return this->getTimeValue( &this->real_time ) - rtc_start;
-}
+uint64_t SystemState::getUptime() { return this->real_time - rtc_start; }
 
-/* bool SystemState::setUptime(uint64_t time) {
-    return this->setTimeValue( &this->uptime, time );
-}*/
-
-int32_t SystemState::getRssi() {
-    return this->getIntegerValue( &this->rssi );
-}
+int32_t SystemState::getRssi() { return this->rssi; }
 
 
 bool SystemState::setRssi(int32_t value) {
@@ -244,18 +231,20 @@ bool SystemState::setMessage(char *bfr) {
 
 
 bool SystemState::getSystemSleepReady() {
-    return (
-        this->blink_sleep_ready && this->gps_done &&
-        this->rockblock_done);
+    return this->blink_sleep_ready && this->gps_done && this->rockblock_done;
 }
 
 uint64_t SystemState::getPriorUptime() { return rtc_prior_uptime; }
+
+uint64_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
 
 /*
  * Write variables to peristent storage using preferences.h. Since it uses
  * the LittleFS filesystem, number of writes to SRAM is managed.
  */
 bool SystemState::persist() {
+    rtc_expected_wakeup = next_send_time(this->real_time, rtc_frequency);
+    Serial.println(rtc_expected_wakeup);
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         preferences.begin("debug", false);
         // add all variables that need to be persisted
@@ -264,5 +253,4 @@ bool SystemState::persist() {
         xSemaphoreGive( this->mutex );
         return true;
     } else return false;
-    rtc_expected_wakeup = this->next_send_time(this->real_time, rtc_frequency);
 }

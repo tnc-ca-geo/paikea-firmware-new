@@ -114,11 +114,14 @@ void LoraRockblock::sendMessage(char *bfr, size_t len) {
     command[cmd_len] = 0x0d;
     this->serial->write(command);
     this->sendSuccess = 0;
+    this->sending = 1;
 }
 
 
 bool LoraRockblock::available() {
-    return true;
+    if (!this->sending) {
+        return true;
+    }
 }
 
 /*
@@ -208,9 +211,10 @@ void LoraRockblock::readSerial() {
 void LoraRockblock::updateStateLogic() {
     if ( this->joinOk ) this->joinFailure = false;
     if ( this->joinFailure ) this->joinOk = false;
-    if ( this->status == 7 || this->status == 8 ) {
+    if ( (this->status == 7 || this->status == 8) && this->sending ) {
         this->sendSuccess = true;
-    } else this->sendSuccess = false;
+        this->sending = false;
+    };
  }
 
 /*
@@ -222,11 +226,11 @@ void LoraRockblock::updateStateLogic() {
 void LoraRockblock::loop() {
     this->readSerial();
     this->updateStateLogic();
-    Serial.print("Status: "); Serial.print(this->status);
+    // Serial.print("Status: "); Serial.print(this->status);
     // Serial.print(", Join ok: "); Serial.print(this->joinOk);
     // Serial.print(", Join failure: "); Serial.print(this->joinFailure);
-    Serial.print(", send success: "); Serial.print(this->sendSuccess);
-    Serial.print(", last incoming: "); Serial.println(this->lastMessage);
+    // Serial.print(", send success: "); Serial.print(this->sendSuccess);
+    // Serial.print(", last incoming: "); Serial.println(this->lastMessage);
     this->serial->write("AT+CSTATUS?\r");
 }
 

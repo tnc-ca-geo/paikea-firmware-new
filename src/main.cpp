@@ -41,7 +41,7 @@ LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
 // State object
 SystemState state = SystemState();
 // Messages
-ScoutMessages scout_messages;
+ScoutMessages scout_messages = ScoutMessages();
 
 /*
  * Blink LED 10. This is a useful indicator for the system running. A mutex is
@@ -120,10 +120,13 @@ void Task_rockblock(void *pvParameters) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
-  // We do not need to rejoin unless we are using a different device. If we
-  // create a Lora class for IoT we need to rewrite.
-  // rockblock.configure();
-  // rockblock.beginJoin();
+  if (rtc_first_run) {
+  rockblock.configure();
+    // Re-joining every single time for now. More complex joining procedures
+    // should be implemented when we really use LoRaWAN, see e.g.
+    // https://www.thethingsnetwork.org/forum/t/how-to-handle-an-automatic-re-join-process/34183/16
+    rockblock.beginJoin();
+  }
   for (;;) {
     rockblock.loop();
     vTaskDelay( pdMS_TO_TICKS( 500 ) );
@@ -142,7 +145,9 @@ void Task_gps(void *pvParameters) {
   for(;;) {
     gps.loop();
     if (gps.updated) {
-      sprintf(bfr, "GPS updated: %.5f, %.5f\n", gps.lat, gps.lng);
+      sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
+      state.setLatitude(gps.lat);
+      state.setLongitude(gps.lng);
       state.setGpsDone(true);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.disable();
@@ -160,46 +165,29 @@ void Task_gps(void *pvParameters) {
 void Task_wait_for_sleep(void *pvParameters) {
   char bfr[255];
   for (;;) {
-    // snprintf(bfr, 255,
-    //  "Sleep ready state %d: blink %d, gps %d, rockblock %d\n",
-    //  state.getGoToSleep(), state.getBlinkSleepReady(),
-    //  state.getGpsDone(), state.getRockblockDone() );
-    // Serial.print(bfr);
-    // check whether to initiate sleep
-    if (state.getSystemSleepReady()) {
+    // Check for sleep once a second.
+    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+    // Check whether system is ready to go to sleep, and persist values
+    if (state.getSystemSleepReady() && state.persist()) {
       Serial.println("Going to sleep");
-      // Sets expander to init state which uses hopefully the least power. All
-      // pins configured as inputs
+      // Sets expander to init state to conserve power.
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         expander.init();
         xSemaphoreGive(mutex_i2c);
       }
-      // Print next send time to serial.
-      // snprintf(bfr, 255, "Next send time %d -> %d\n", state.getRealTime(),
-      // next_send_time(state.getRealTime(), 300));
-      // Set expected wake up time and turn display off
-      // Set values that need to survive sleep but NOT a cold start
-      // rtc_expected_wakeup = state.getRealTime() + SLEEP_TIME;
-      state.setDisplayOff( true );
       // Give some time to turn display off
       // TODO: check actual state
+      state.setDisplayOff( true );
       vTaskDelay( pdMS_TO_TICKS(300) );
-      // Store state values into persistent storage
-      state.persist();
-      // Give some extra time for everything to settle down.
-      vTaskDelay( pdMS_TO_TICKS( 250 ) );
-      Serial.print("Frequency: "); Serial.print(state.getFrequency());
-      Serial.print(", next send time: ");
-      Serial.print(state.getNextSendTime());
-      int64_t difference =
-        state.getNextSendTime() - state.getRealTime();
-      Serial.print(", difference: ");
-      Serial.println(difference);
+      time_t difference = state.getWakeupTime() - state.getRealTime();
+      snprintf(
+        bfr, 255, "Frequency: %d, next send time: %d, difference: %d\n",
+        (uint32_t) state.getFrequency(), (uint32_t) state.getWakeupTime(),
+        (uint32_t) difference);
+      Serial.print(bfr);
       esp_sleep_enable_timer_wakeup( difference * 1E6 );
       esp_deep_sleep_start();
     }
-    // Check for sleep once a second.
-    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
   }
 }
 
@@ -208,9 +196,7 @@ void Task_wait_for_sleep(void *pvParameters) {
  */
 void Task_message(void *pvParameters) {
   for (;;) {
-    if ( rockblock.available() ) {
-      rockblock.sendMessage((char*) "Hello world!\0");
-    }
+    if ( rockblock.available() ) rockblock.sendMessage((char*) "Hello world!\0");
     vTaskDelay( pdMS_TO_TICKS( 10000 ) );
   }
 }
@@ -236,7 +222,8 @@ void Task_schedule(void *pvParameters) {
     }
 
     if ( gps.updated && state.getMessageSent() ) {
-      // We are setting a flag that all components can go into sleep state
+      // We are setting a flag informing all components to go into sleep state.
+      // Sleep will wait until everyone is ready.
       state.setGoToSleep(true);
     }
 

@@ -43,14 +43,18 @@ void Gps::loop() {
             this->gps_parser.date, this->gps_parser.time);
         this->lat = this->gps_parser.location.lat();
         this->lng = this->gps_parser.location.lng();
+        Serial.print("LAT: "); Serial.print(this->lat, 6);
+        Serial.print(", LON: "); Serial.println(this->lng, 6);
         this->updated = true;
     } else this->updated = false;
 }
+
 
 uint64_t Gps::get_corrected_epoch() {
     return this->epoch + (
         esp_timer_get_time() - this->gps_read_system_time )/1E6;
 };
+
 
 /*
  * Read one line from the GPS and store into buffer. This is currently unused

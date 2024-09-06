@@ -9,6 +9,9 @@
 
 class ScoutMessages {
 
+    private:
+        static void float2Nmea(char* bfr, float value, bool latFlag=true);
+
     public:
         static void createPK001(SystemState &state, char* bfr);
 
