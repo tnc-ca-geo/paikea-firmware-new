@@ -62,11 +62,8 @@ class SystemState {
         char message[255] = {0};
         // private methods
         time_t next_send_time(time_t now, uint16_t delay);
-        bool getBoolValue(bool *ref);
-        bool setBoolValue(bool *ref, bool value);
         time_t getTimeValue(time_t *ref);
         bool setTimeValue(time_t *ref, time_t value);
-        bool setIntegerValue(int32_t *ref, int32_t value);
         size_t getBuffer(char *ref, char *outBfr);
         bool setBuffer(char *ref, char *inBfr);
 
@@ -75,26 +72,26 @@ class SystemState {
         // init populates state variables from persistent storage
         bool init();
         bool getBlinkSleepReady();
-        bool setBlinkSleepReady(bool value);
+        void setBlinkSleepReady(bool val);
         bool getDisplayOff();
-        bool setDisplayOff(bool value);
+        void setDisplayOff(bool val);
         bool getGoToSleep();
-        bool setGoToSleep(bool value);
+        void setGoToSleep(bool val);
         bool getGpsDone();
-        bool setGpsDone(bool value);
+        void setGpsDone(bool val);
         size_t getMessage(char *bfr);
         bool setMessage(char *bfr);
+        void setRockblockDone(bool val);
         bool getRockblockDone();
-        bool setRockblockDone(bool value);
-        bool getSystemSleepReady();
+        void setMessageSent(bool val);
         bool getMessageSent();
-        bool setMessageSent(bool value);
+        bool getSystemSleepReady();
         void setLongitude(float value);
         float getLongitude();
         void setLatitude(float value);
         float getLatitude();
+        void setRssi(int32_t val);
         int32_t getRssi();
-        bool setRssi(int32_t value);
         time_t getPriorUptime();
         time_t getWakeupTime();
         time_t getFrequency();

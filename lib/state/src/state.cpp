@@ -26,7 +26,6 @@ time_t SystemState::next_send_time(time_t now, uint16_t delay) {
 bool SystemState::init() {
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         if (rtc_first_run) {
-            preferences.begin("debug", false);
             rtc_prior_uptime = preferences.getUInt("uptime", 0);
             preferences.end();
             rtc_first_run = false;
@@ -40,26 +39,6 @@ bool SystemState::init() {
     } else return false;
 }
 
-
-bool SystemState::getBoolValue(bool *ref) {
-    bool ret = false;
-    if ( xSemaphoreTake( this->mutex, WAIT ) == pdTRUE ) {
-        ret = *ref;
-        xSemaphoreGive( this->mutex );
-        return ret;
-    } else return false;
-}
-
-
-bool SystemState::setBoolValue(bool *ref, bool value) {
-    if ( xSemaphoreTake( this->mutex, WAIT ) == pdTRUE ) {
-        *ref = value;
-        xSemaphoreGive( this->mutex );
-        return true;
-    } else return false;
-}
-
-
 time_t SystemState::getTimeValue(time_t *ref) {
     time_t ret = 0;
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
@@ -69,7 +48,6 @@ time_t SystemState::getTimeValue(time_t *ref) {
     } else return 0;
 }
 
-
 bool SystemState::setTimeValue(time_t *ref, time_t value) {
     if ( xSemaphoreTake( this->mutex, WAIT ) == pdTRUE ) {
         *ref = value;
@@ -77,16 +55,6 @@ bool SystemState::setTimeValue(time_t *ref, time_t value) {
         return true;
     } else return false;
 }
-
-
-bool SystemState::setIntegerValue(int32_t *ref, int32_t value) {
-    if ( xSemaphoreTake( this->mutex, WAIT ) == pdTRUE ) {
-        *ref = value;
-        xSemaphoreGive( this->mutex );
-        return true;
-    } else return false;
-}
-
 
 size_t SystemState::getBuffer(char *ref, char *outBfr) {
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
@@ -99,7 +67,6 @@ size_t SystemState::getBuffer(char *ref, char *outBfr) {
     return 0;
 }
 
-
 bool SystemState::setBuffer(char *ref, char *inBfr) {
     const size_t size = strlen(inBfr);
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
@@ -110,63 +77,23 @@ bool SystemState::setBuffer(char *ref, char *inBfr) {
     } else return false;
 }
 
+void SystemState::setBlinkSleepReady(bool val) { blink_sleep_ready = val; }
+bool SystemState::getBlinkSleepReady() { return blink_sleep_ready; }
 
-bool SystemState::getBlinkSleepReady() {
-    return this->getBoolValue( &this->blink_sleep_ready );
-}
+void SystemState::setDisplayOff(bool val) { display_off = val; }
+bool SystemState::getDisplayOff() { return display_off; }
 
+void SystemState::setGoToSleep(bool val) { go_to_sleep = val; }
+bool SystemState::getGoToSleep() { return go_to_sleep; }
 
-bool SystemState::setBlinkSleepReady(bool value) {
-    return this->setBoolValue( &this->blink_sleep_ready, value );
-}
+void SystemState::setGpsDone(bool val) { gps_done = val; }
+bool SystemState::getGpsDone() { return gps_done; }
 
+void SystemState::setRockblockDone(bool val) { rockblock_done = val; }
+bool SystemState::getRockblockDone() { return rockblock_done; }
 
-bool SystemState::getDisplayOff() {
-    return this->getBoolValue( &this->display_off );
-}
-
-
-bool SystemState::setDisplayOff(bool value) {
-    return this->setBoolValue( &this->display_off, value );
-}
-
-
-bool SystemState::getGoToSleep() {
-    return this->getBoolValue( &this->go_to_sleep );
-}
-
-
-bool SystemState::setGoToSleep(bool value) {
-    return this->setBoolValue( &this->go_to_sleep, value );
-}
-
-
-bool SystemState::getGpsDone() {
-    return this->getBoolValue( &this->gps_done );
-}
-
-
-bool SystemState::setGpsDone(bool value) {
-    return this->setBoolValue( &this->gps_done, value );
-}
-
-
-bool SystemState::getRockblockDone() {
-    return this->getBoolValue( &this->rockblock_done );
-}
-
-
-bool SystemState::setRockblockDone(bool value) {
-    return this->setBoolValue( &this->rockblock_done, value );
-}
-
-bool SystemState::getMessageSent() {
-    return this->getBoolValue( &this->message_sent );
-}
-
-bool SystemState::setMessageSent(bool value) {
-    return this->setBoolValue( &this->message_sent, value );
-}
+void SystemState::setMessageSent(bool val) { message_sent = val; }
+bool SystemState::getMessageSent() { return message_sent; }
 
 time_t SystemState::getRealTime() {
     return this->getTimeValue( &this->real_time );
@@ -212,23 +139,16 @@ bool SystemState::setRealTime(time_t time, bool gps) {
 
 time_t SystemState::getUptime() { return this->real_time - rtc_start; }
 
+void SystemState::setRssi(int32_t val) { rssi = val; }
 int32_t SystemState::getRssi() { return this->rssi; }
-
-
-bool SystemState::setRssi(int32_t value) {
-    return this->setIntegerValue( &this->rssi, value);
-}
-
-
-size_t SystemState::getMessage(char *bfr) {
-    return this->getBuffer(this->message, bfr);
-}
-
 
 bool SystemState::setMessage(char *bfr) {
     return this->setBuffer(this->message, bfr);
 }
 
+size_t SystemState::getMessage(char *bfr) {
+    return this->getBuffer(this->message, bfr);
+}
 
 bool SystemState::getSystemSleepReady() {
     return this->blink_sleep_ready && this->gps_done && this->rockblock_done;
