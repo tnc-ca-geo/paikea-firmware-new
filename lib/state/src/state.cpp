@@ -26,10 +26,12 @@ time_t SystemState::next_send_time(time_t now, uint16_t delay) {
 bool SystemState::init() {
     if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
         if (rtc_first_run) {
+            preferences.begin("scout", false);
             rtc_prior_uptime = preferences.getUInt("uptime", 0);
             preferences.end();
             rtc_first_run = false;
-            Serial.print("Last uptime: "); Serial.println(rtc_prior_uptime);
+            Serial.print("Last uptime: ");
+            Serial.println((uint32_t) rtc_prior_uptime);
             rtc_expected_wakeup = 0;
         }
         this->real_time = rtc_expected_wakeup;
@@ -45,7 +47,10 @@ time_t SystemState::getTimeValue(time_t *ref) {
         ret = *ref;
         xSemaphoreGive( this->mutex );
         return ret;
-    } else return 0;
+    } else {
+        Serial.println("BLOCKED");
+        return 0;
+    }
 }
 
 bool SystemState::setTimeValue(time_t *ref, time_t value) {
@@ -113,18 +118,22 @@ void SystemState::setLongitude(float value) { this->lng = value; }
 float SystemState::getLongitude() { return this->lng; }
 
 /*
- * Calculate time without new time information.
+ * Calculate time from available information, we starting at epoch 0,
+ * 1970-01-01 00:00:00 if we don't have any other information.
  */
 bool SystemState::sync() {
     time_t set_time = esp_timer_get_time()/1E6;
-    time_t time =
-        this->real_time + set_time - this->time_read_system_time;
+    time_t rl_time = getTimeValue( &this->real_time );
+    time_t rd_time = getTimeValue( &this->time_read_system_time );
+    time_t time = rl_time + set_time - rd_time;
+    uptime = rl_time - rtc_start;
     return (this->setTimeValue(&this->real_time, time)
         && this->setTimeValue(&this->time_read_system_time, set_time));
 }
 
 /*
- * Sync all time values with new actual time information.
+ * Sync all time values with new information. Recalculate start time, when
+ * real time is available.
  */
 bool SystemState::setRealTime(time_t time, bool gps) {
     this->setTimeValue( &this->time_read_system_time, esp_timer_get_time()/1E6);
@@ -136,8 +145,7 @@ bool SystemState::setRealTime(time_t time, bool gps) {
     return this->setTimeValue( &this->real_time, time ) && this->sync();
 }
 
-
-time_t SystemState::getUptime() { return this->real_time - rtc_start; }
+uint32_t SystemState::getUptime() { return this->uptime; }
 
 void SystemState::setRssi(int32_t val) { rssi = val; }
 int32_t SystemState::getRssi() { return this->rssi; }
@@ -162,15 +170,10 @@ time_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
  * Write variables to peristent storage using preferences.h. Since it uses
  * the LittleFS filesystem, number of writes to SRAM is managed.
  */
-bool SystemState::persist() {
-    rtc_expected_wakeup = next_send_time(this->real_time, rtc_frequency);
-    Serial.println(rtc_expected_wakeup);
-    if (xSemaphoreTake( this->mutex, WAIT ) == pdTRUE) {
-        preferences.begin("debug", false);
-        // add all variables that need to be persisted
-        preferences.putUInt("uptime", this->uptime);
-        preferences.end();
-        xSemaphoreGive( this->mutex );
-        return true;
-    } else return false;
+ void SystemState::persist() {
+    rtc_expected_wakeup = next_send_time(
+        getTimeValue( &this->real_time), rtc_frequency );
+    preferences.begin("scout", false);
+    preferences.putUInt("uptime", uptime);
+    preferences.end();
 }

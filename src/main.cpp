@@ -168,22 +168,23 @@ void Task_wait_for_sleep(void *pvParameters) {
     // Check for sleep once a second.
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
     // Check whether system is ready to go to sleep, and persist values
-    if (state.getSystemSleepReady() && state.persist()) {
+    if (state.getSystemSleepReady()) {
       Serial.println("Going to sleep");
       // Sets expander to init state to conserve power.
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         expander.init();
         xSemaphoreGive(mutex_i2c);
       }
+      state.persist();
       // Give some time to turn display off
       // TODO: check actual state
       state.setDisplayOff( true );
       vTaskDelay( pdMS_TO_TICKS(300) );
-      time_t difference = state.getWakeupTime() - state.getRealTime();
+      uint32_t difference = state.getWakeupTime() - state.getRealTime();
       snprintf(
         bfr, 255, "Frequency: %d, next send time: %d, difference: %d\n",
         (uint32_t) state.getFrequency(), (uint32_t) state.getWakeupTime(),
-        (uint32_t) difference);
+        difference);
       Serial.print(bfr);
       esp_sleep_enable_timer_wakeup( difference * 1E6 );
       esp_deep_sleep_start();

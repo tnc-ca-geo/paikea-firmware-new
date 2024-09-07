@@ -43,7 +43,8 @@ class SystemState {
         Preferences preferences;
         time_t real_time = 0;
         time_t prior_uptime = 0;
-        time_t uptime = 0;
+        // use uint here since it is a time difference
+        uint32_t uptime = 0;
         // system time when time was last updated from a real time reading
         time_t time_read_system_time = 0;
         // uint16_t frequency = 300;
@@ -101,10 +102,9 @@ class SystemState {
         bool setRealTime(time_t time, bool gps=false);
         // sync all time values, implicitely called by setRealTime()
         bool sync();
-        time_t getUptime();
-        // bool setUptime(uint64_t time);
+        uint32_t getUptime();
         // write variables that should survive sleep or power off
-        bool persist();
+        void persist();
 };
 
 #endif /* __STATE_H__ */
