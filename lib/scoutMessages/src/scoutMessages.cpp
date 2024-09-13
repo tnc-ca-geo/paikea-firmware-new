@@ -3,7 +3,7 @@
 /*
  * Take a float value and return NMEA string
  */
-void ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
+size_t ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
     size_t ptr;
     float whole, mins;
     bfr[0] = 0;
@@ -14,7 +14,21 @@ void ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
     }
     ptr = strlen(bfr);
     mins = std::modf(value, &whole) * 60;
-    sprintf(bfr+ptr, "%.0f%.4f", whole, mins);
+    ptr = sprintf(bfr+ptr, "%.0f%.4f,", whole, mins);
+    if ( latFlag ) {
+        if (value >= 0) {
+            memcpy(bfr+ptr+1+4, (char*) "NS:N", 5);
+        } else {
+            memcpy(bfr+ptr+1+4, (char*) "NS:S", 5);
+        }
+    } else {
+if (value >= 0) {
+            memcpy(bfr+ptr+1+4, (char*) "EW:E", 5);
+        } else {
+            memcpy(bfr+ptr+1+4, (char*) "EW:W", 5);
+        }
+    }
+    return ptr + 5 + 5;
 }
 
 /*
@@ -25,10 +39,11 @@ void ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
  */
 void ScoutMessages::createPK001(SystemState &state, char* bfr) {
     char helpBfr[255] = {0};
-    memcpy(bfr, (char*) "PK001;lat:", 10);
-    float2Nmea(helpBfr, state.getLatitude(), true);
-
-    Serial.print("NMEA: "), Serial.println(helpBfr);
+    // sprintf(bfr, 255, "PK001;")
+    memcpy(bfr, (char*) "PK001;", 6);
+    size_t len = float2Nmea(helpBfr, state.getLatitude(), true);
+    memcpy(bfr+6, helpBfr, len);
+    Serial.print("Message: "), Serial.println(bfr);
     // Serial.print("lat: "); Serial.print(state.getLatitude());
     // Serial.print(", lng: "); Serial.println(state.getLongitude());
 }

@@ -18,7 +18,6 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-
 /*
  * This variables will be persisted during deep sleep using slow RTC memory
  * but cleared upon reset.
@@ -42,13 +41,13 @@ class SystemState {
          */
         Preferences preferences;
         time_t real_time = 0;
-        time_t prior_uptime = 0;
+        uint32_t prior_uptime = 0;
         // use uint here since it is a time difference
         uint32_t uptime = 0;
         // system time when time was last updated from a real time reading
         time_t time_read_system_time = 0;
         // uint16_t frequency = 300;
-        bool go_to_sleep =0;
+        bool go_to_sleep = 0;
         bool gps_done = 0;
         bool message_sent = 0;
         bool blink_sleep_ready; // TODO: remove

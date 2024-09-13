@@ -29,7 +29,6 @@ bool SystemState::init() {
             preferences.begin("scout", false);
             rtc_prior_uptime = preferences.getUInt("uptime", 0);
             preferences.end();
-            rtc_first_run = false;
             Serial.print("Last uptime: ");
             Serial.println((uint32_t) rtc_prior_uptime);
             rtc_expected_wakeup = 0;
@@ -173,6 +172,7 @@ time_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
  void SystemState::persist() {
     rtc_expected_wakeup = next_send_time(
         getTimeValue( &this->real_time), rtc_frequency );
+    rtc_first_run = false;
     preferences.begin("scout", false);
     preferences.putUInt("uptime", uptime);
     preferences.end();

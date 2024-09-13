@@ -116,12 +116,15 @@ void Task_display(void *pvParameters) {
  * Rockblock.
  */
 void Task_rockblock(void *pvParameters) {
+  Serial.print("Start RB loop, ");
+  Serial.print("rtc_first_run: "), Serial.println(rtc_first_run);
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
   if (rtc_first_run) {
-  rockblock.configure();
+    Serial.println("Configure LoraWAN");
+    rockblock.configure();
     // Re-joining every single time for now. More complex joining procedures
     // should be implemented when we really use LoRaWAN, see e.g.
     // https://www.thethingsnetwork.org/forum/t/how-to-handle-an-automatic-re-join-process/34183/16

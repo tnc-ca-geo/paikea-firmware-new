@@ -89,6 +89,7 @@ bool LoraRockblock::configure() {
 
 void LoraRockblock::beginJoin() {
     char command[] = "AT+CJOIN=1,1,8,16\r";
+    Serial.println("Start join.");
     this->serial->write(command);
 }
 
