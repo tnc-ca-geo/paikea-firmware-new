@@ -33,8 +33,8 @@ bool SystemState::init() {
             Serial.println((uint32_t) rtc_prior_uptime);
             rtc_expected_wakeup = 0;
         }
-        this->real_time = rtc_expected_wakeup;
-        this->time_read_system_time = esp_timer_get_time()/1E6;
+        state.real_time = rtc_expected_wakeup;
+        state.time_read_system_time = esp_timer_get_time()/1E6;
         xSemaphoreGive( this->mutex );
         return true;
     } else return false;
@@ -81,26 +81,26 @@ bool SystemState::setBuffer(char *ref, char *inBfr) {
     } else return false;
 }
 
-void SystemState::setBlinkSleepReady(bool val) { blink_sleep_ready = val; }
-bool SystemState::getBlinkSleepReady() { return blink_sleep_ready; }
+void SystemState::setBlinkSleepReady(bool val) { state.blink_sleep_ready = val; }
+bool SystemState::getBlinkSleepReady() { return state.blink_sleep_ready; }
 
-void SystemState::setDisplayOff(bool val) { display_off = val; }
-bool SystemState::getDisplayOff() { return display_off; }
+void SystemState::setDisplayOff(bool val) { state.display_off = val; }
+bool SystemState::getDisplayOff() { return state.display_off; }
 
-void SystemState::setGoToSleep(bool val) { go_to_sleep = val; }
-bool SystemState::getGoToSleep() { return go_to_sleep; }
+void SystemState::setGoToSleep(bool val) { state.go_to_sleep = val; }
+bool SystemState::getGoToSleep() { return state.go_to_sleep; }
 
-void SystemState::setGpsDone(bool val) { gps_done = val; }
-bool SystemState::getGpsDone() { return gps_done; }
+void SystemState::setGpsDone(bool val) { state.gps_done = val; }
+bool SystemState::getGpsDone() { return state.gps_done; }
 
-void SystemState::setRockblockDone(bool val) { rockblock_done = val; }
-bool SystemState::getRockblockDone() { return rockblock_done; }
+void SystemState::setRockblockDone(bool val) { state.rockblock_done = val; }
+bool SystemState::getRockblockDone() { return state.rockblock_done; }
 
-void SystemState::setMessageSent(bool val) { message_sent = val; }
-bool SystemState::getMessageSent() { return message_sent; }
+void SystemState::setMessageSent(bool val) { state.message_sent = val; }
+bool SystemState::getMessageSent() { return state.message_sent; }
 
 time_t SystemState::getRealTime() {
-    return this->getTimeValue( &this->real_time );
+    return this->getTimeValue( &state.real_time );
 }
 
 time_t SystemState::getFrequency() { return rtc_frequency; }
@@ -110,11 +110,11 @@ time_t SystemState::getNextSendTime() {
 };
 
 // should be atomic
-void SystemState::setLatitude(float value) { this->lat = value; }
-float SystemState::getLatitude() { return this->lat; }
+void SystemState::setLatitude(float value) { state.lat = value; }
+float SystemState::getLatitude() { return state.lat; }
 // should be atomic
-void SystemState::setLongitude(float value) { this->lng = value; }
-float SystemState::getLongitude() { return this->lng; }
+void SystemState::setLongitude(float value) { state.lng = value; }
+float SystemState::getLongitude() { return state.lng; }
 
 /*
  * Calculate time from available information, we starting at epoch 0,
@@ -122,12 +122,12 @@ float SystemState::getLongitude() { return this->lng; }
  */
 bool SystemState::sync() {
     time_t set_time = esp_timer_get_time()/1E6;
-    time_t rl_time = getTimeValue( &this->real_time );
-    time_t rd_time = getTimeValue( &this->time_read_system_time );
+    time_t rl_time = getTimeValue( &state.real_time );
+    time_t rd_time = getTimeValue( &state.time_read_system_time );
     time_t time = rl_time + set_time - rd_time;
-    uptime = rl_time - rtc_start;
-    return (this->setTimeValue(&this->real_time, time)
-        && this->setTimeValue(&this->time_read_system_time, set_time));
+    state.uptime = rl_time - rtc_start;
+    return (this->setTimeValue(&state.real_time, time)
+        && this->setTimeValue(&state.time_read_system_time, set_time));
 }
 
 /*
@@ -135,30 +135,31 @@ bool SystemState::sync() {
  * real time is available.
  */
 bool SystemState::setRealTime(time_t time, bool gps) {
-    this->setTimeValue( &this->time_read_system_time, esp_timer_get_time()/1E6);
+    this->setTimeValue(
+        &state.time_read_system_time, esp_timer_get_time()/1E6 );
     if (gps && rtc_first_fix) {
         rtc_start = time - esp_timer_get_time()/1E6;
         rtc_first_fix = false;
     }
     // setting real time to new value and sync all other time values
-    return this->setTimeValue( &this->real_time, time ) && this->sync();
+    return this->setTimeValue( &state.real_time, time ) && this->sync();
 }
 
-uint32_t SystemState::getUptime() { return this->uptime; }
+uint32_t SystemState::getUptime() { return state.uptime; }
 
-void SystemState::setRssi(int32_t val) { rssi = val; }
-int32_t SystemState::getRssi() { return this->rssi; }
+void SystemState::setRssi(int32_t val) { state.rssi = val; }
+int32_t SystemState::getRssi() { return state.expander_sleep_ready; }
 
 bool SystemState::setMessage(char *bfr) {
-    return this->setBuffer(this->message, bfr);
+    return this->setBuffer(state.message, bfr);
 }
 
 size_t SystemState::getMessage(char *bfr) {
-    return this->getBuffer(this->message, bfr);
+    return this->getBuffer(state.message, bfr);
 }
 
 bool SystemState::getSystemSleepReady() {
-    return this->blink_sleep_ready && this->gps_done && this->rockblock_done;
+    return state.blink_sleep_ready && state.gps_done && state.rockblock_done;
 }
 
 time_t SystemState::getPriorUptime() { return rtc_prior_uptime; }
@@ -171,9 +172,9 @@ time_t SystemState::getWakeupTime() { return rtc_expected_wakeup; };
  */
  void SystemState::persist() {
     rtc_expected_wakeup = next_send_time(
-        getTimeValue( &this->real_time), rtc_frequency );
+        getTimeValue( &state.real_time), rtc_frequency );
     rtc_first_run = false;
     preferences.begin("scout", false);
-    preferences.putUInt("uptime", uptime);
+    preferences.putUInt("uptime", state.uptime);
     preferences.end();
 }

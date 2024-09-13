@@ -17,6 +17,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <stateType.h>
 
 /*
  * This variables will be persisted during deep sleep using slow RTC memory
@@ -40,7 +41,8 @@ class SystemState {
          * write cycles for this kind of storage.
          */
         Preferences preferences;
-        time_t real_time = 0;
+        systemState state;
+        /* time_t real_time = 0;
         uint32_t prior_uptime = 0;
         // use uint here since it is a time difference
         uint32_t uptime = 0;
@@ -59,7 +61,7 @@ class SystemState {
         float lat=999;
         float lng=999;
         int32_t rssi;
-        char message[255] = {0};
+        char message[255] = {0};*/
         // private methods
         time_t next_send_time(time_t now, uint16_t delay);
         time_t getTimeValue(time_t *ref);
