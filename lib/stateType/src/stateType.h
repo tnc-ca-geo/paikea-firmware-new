@@ -3,12 +3,17 @@
  */
 #ifndef __SCOUT_STATE_TYPES__
 #define __SCOUT_STATE_TYPES__
+#include <Arduino.h>
 
 typedef struct {
     time_t real_time = 0;
+    time_t start_time = 0;
     time_t time_read_system_time = 0;
+    time_t expected_wakeup = 0;
     uint32_t uptime = 0;
     uint32_t prior_uptime = 0;
+    uint32_t frequency = 120;
+    bool first_fix = false;
     bool go_to_sleep = 0;
     bool gps_done = 0;
     bool message_sent = 0;

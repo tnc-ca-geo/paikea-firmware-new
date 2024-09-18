@@ -6,8 +6,9 @@
 #include <gps.h>
 #include <display.h>
 #include <loraRockblock.h>
-#include <state.h>
+#include <stateType.h>
 #include <scoutMessages.h>
+#include <storage.h>
 // project
 #include "pindefs.h"
 
@@ -18,7 +19,11 @@
 
 // Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
-// create TaskhHandles
+// Use to protect state object if not atomic, ideally we would modify state
+// object only in one place
+static SemaphoreHandle_t mutex_state;
+// create TaskhHandles, reduce number of tasks to one for each peripherial and
+// one for the main state object
 static TaskHandle_t blinkTaskHandle = NULL;
 static TaskHandle_t displayTaskHandle = NULL;
 static TaskHandle_t gpsTaskHandle = NULL;
@@ -39,9 +44,41 @@ LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
 LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
 // State object
-SystemState state = SystemState();
+systemState state;
+// Storage
+ScoutStorage storage = ScoutStorage();
 // Messages
 ScoutMessages scout_messages = ScoutMessages();
+
+
+void setTime(time_t time) {
+  if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+    state.real_time = time;
+    state.time_read_system_time = esp_timer_get_time()/1E6;
+    if (state.first_fix) {
+      state.start_time = state.real_time - state.time_read_system_time;
+    }
+    xSemaphoreGive(mutex_state);
+  }
+}
+
+time_t getNextWakeupTime(time_t now, uint16_t delay) {
+  time_t full_hour = int(now/3600) * 3600;
+  uint16_t cycles = int(now % 3600/delay);
+  return full_hour + (cycles + 1) * delay;
+}
+
+void syncTime() {
+  if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
+    time_t set_time = esp_timer_get_time()/1E6;
+    time_t time = state.real_time + set_time - state.time_read_system_time;
+    state.real_time = time;
+    state.time_read_system_time = set_time;
+    state.expected_wakeup = getNextWakeupTime(time, state.frequency);
+    state.uptime = state.real_time - state.start_time;
+    xSemaphoreGive(mutex_state);
+  }
+}
 
 /*
  * Blink LED 10. This is a useful indicator for the system running. A mutex is
@@ -54,8 +91,8 @@ void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   for(;;) {
     // deregister when LED is off
-    if (state.getGoToSleep() && blink_state) {
-      state.setBlinkSleepReady(true);
+    if (state.go_to_sleep && blink_state) {
+      state.blink_sleep_ready = true;
       vTaskDelete( blinkTaskHandle );
     } else {
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
@@ -73,8 +110,9 @@ void Task_blink(void *pvParamaters) {
  */
 void Task_time_sync(void *pvParameters) {
   for(;;) {
-    if ( gps.updated ) { state.setRealTime( gps.get_corrected_epoch(), true ); }
-    else state.sync();
+    syncTime();
+    // if ( gps.updated ) { state.setRealTime( gps.get_corrected_epoch(), true ); }
+    // else state.sync();
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
@@ -89,7 +127,7 @@ void Task_display(void *pvParameters) {
   char out_string[255] = {0};
   char time_string[22] = {0};
   for(;;) {
-    if ( state.getDisplayOff() ) {
+    if ( state.display_off ) {
       Serial.println("Turn display off.");
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.off();
@@ -97,10 +135,10 @@ void Task_display(void *pvParameters) {
         vTaskDelete( displayTaskHandle );
       }
     } else {
-      time_t time = state.getRealTime();
-      strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
+      time_t time = state.real_time;
+      strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
       snprintf(
-        out_string, 50, "%s\nrssi %5d\n%s", time_string, state.getRssi(),
+        out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
         message_string);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.set(out_string);
@@ -149,9 +187,13 @@ void Task_gps(void *pvParameters) {
     gps.loop();
     if (gps.updated) {
       sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
-      state.setLatitude(gps.lat);
-      state.setLongitude(gps.lng);
-      state.setGpsDone(true);
+      state.lat = gps.lat;
+      state.lng = gps.lng;
+      state.gps_done = true;
+      setTime( gps.get_corrected_epoch() );
+      // state.setLatitude(gps.lat);
+      // tate.setLongitude(gps.lng);
+      // state.setGpsDone(true);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.disable();
         xSemaphoreGive(mutex_i2c);
@@ -171,22 +213,22 @@ void Task_wait_for_sleep(void *pvParameters) {
     // Check for sleep once a second.
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
     // Check whether system is ready to go to sleep, and persist values
-    if (state.getSystemSleepReady()) {
+    if (state.gps_done && state.blink_sleep_ready && state.rockblock_done) {
       Serial.println("Going to sleep");
       // Sets expander to init state to conserve power.
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         expander.init();
         xSemaphoreGive(mutex_i2c);
       }
-      state.persist();
       // Give some time to turn display off
+      storage.store( state );
       // TODO: check actual state
-      state.setDisplayOff( true );
+      state.display_off = true;
       vTaskDelay( pdMS_TO_TICKS(300) );
-      uint32_t difference = state.getWakeupTime() - state.getRealTime();
+      uint32_t difference = state.expected_wakeup - state.real_time;
       snprintf(
         bfr, 255, "Frequency: %d, next send time: %d, difference: %d\n",
-        (uint32_t) state.getFrequency(), (uint32_t) state.getWakeupTime(),
+        (uint32_t) state.frequency, (uint32_t) state.expected_wakeup,
         difference);
       Serial.print(bfr);
       esp_sleep_enable_timer_wakeup( difference * 1E6 );
@@ -215,20 +257,20 @@ void Task_schedule(void *pvParameters) {
 
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
 
-    if ( gps.updated && !state.getMessageSent() ) {
+    if ( gps.updated && !state.message_sent ) {
       scout_messages.createPK001(state, message);
       rockblock.sendMessage(message);
-      state.setMessageSent(true);
+      state.message_sent = true;
     }
 
-    if ( state.getMessageSent() && rockblock.getSendSuccess() ) {
-      state.setRockblockDone(true);
+    if ( state.message_sent && rockblock.getSendSuccess() ) {
+      state.rockblock_done = true;
     }
 
-    if ( gps.updated && state.getMessageSent() ) {
+    if ( gps.updated && state.message_sent ) {
       // We are setting a flag informing all components to go into sleep state.
       // Sleep will wait until everyone is ready.
-      state.setGoToSleep(true);
+      state.go_to_sleep = true;
     }
 
   }
@@ -246,8 +288,8 @@ void setup() {
     ROCKBLOCK_SERIAL_TX_PIN);
   // ---- Start I2C bus for peripherials ----------
   Wire.begin();
-  // ---- Load state
-  state.init();
+  // ---- Restore state
+  storage.restore(state);
   // ----- Init Display
   display.begin();
   // ----- Init Expander --------------------------
@@ -272,6 +314,7 @@ void setup() {
    *  - display
    */
   mutex_i2c = xSemaphoreCreateMutex();
+  mutex_state = xSemaphoreCreateMutex();
 
   /*
    * Create and start simple tasks (for now). All components are started to

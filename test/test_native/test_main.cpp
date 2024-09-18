@@ -17,6 +17,8 @@ void tearDown() {}
 int main() {
     UNITY_BEGIN();
     // test the state object
+    RUN_TEST(test_createPK001);
+    RUN_TEST(test_float2Nmea);
     // RUN_TEST(test_state_init);
     // RUN_TEST(test_state_realtime);
     // RUN_TEST(test_next_send_time);
