@@ -19,10 +19,6 @@ int main() {
     // test the state object
     RUN_TEST(test_createPK001);
     RUN_TEST(test_float2Nmea);
-    // RUN_TEST(test_state_init);
-    // RUN_TEST(test_state_realtime);
-    // RUN_TEST(test_next_send_time);
-    // testy loraRockblock
-    // RUN_TEST(test_parse_integer);
+    RUN_TEST(test_epoch2utc);
     return UNITY_END();
 }

@@ -24,6 +24,7 @@ typedef struct {
     bool send_success; // TODO: remove
     float lat=999;
     float lng=999;
+    float bat=0;
     int32_t rssi;
     char message[255] = {0};
 } systemState;

@@ -9,21 +9,16 @@
 #ifndef __SCOUT_MESSAGES_H__
 #define __SCOUT_MESSAGES_H__
 
+#include <time.h>
 #include <stateType.h>
-
-const std::string EWE = "EW:E";
-const std::string EWW = "EW:W";
-const std::string NSN = "NS:N";
-const std::string NSS = "NS:S";
-const std::string LAT = "lat";
-const std::string LON = "lon";
 
 
 class ScoutMessages {
 
     public:
-        static size_t createPK001(systemState &state, char* bfr);
-        static size_t float2Nmea(char* bfr, float value, bool latFlag=true);
+        static size_t createPK001(char* bfr, systemState &state);
+        static size_t float2Nmea(char* bfr, float val, bool latFlag=true);
+        static size_t epoch2utc(char* bfr, time_t val);
 
 };
 

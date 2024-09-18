@@ -3,31 +3,22 @@
 /*
  * Take a float value and return NMEA string for lat and long.
  */
-size_t ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
+size_t ScoutMessages::float2Nmea(char* bfr, float val, bool latFlag) {
     size_t ptr;
-    float whole, mins;
-    if (latFlag) {
-        memcpy(bfr, (char*) "lat:", 4);
-    } else {
-        memcpy(bfr, (char*) "lon:", 4);
-    }
-    mins = abs(std::modf(value, &whole)) * 60;
-    whole = abs(whole);
-    ptr = snprintf(bfr+4, 16, "%.0f%07.4f,", whole, mins);
-    if ( latFlag ) {
-        if (value >= 0) {
-            memcpy(bfr+ptr+4, (char*) "NS:N", 5);
-        } else {
-            memcpy(bfr+ptr+4, (char*) "NS:S", 5);
-        }
-    } else {
-        if (value >= 0) {
-            memcpy(bfr+ptr+4, (char*) "EW:E", 5);
-        } else {
-            memcpy(bfr+ptr+4, (char*) "EW:W", 5);
-        }
-    }
-    return ptr + 9;
+    float whole;
+    float mins = abs(std::modf(val, &whole)) * 60;
+    return snprintf(bfr, 32, "%s:%.0f%07.4f,%s",
+        latFlag ? "lat" : "lon", abs(whole), mins,
+        latFlag ? (val >= 0 ? "NS:N" : "NS:S") : val >= 0 ? "EW:E" : "EW:W");
+}
+
+/*
+ * Create utc time hhmmss.00 as it used in PK001 messages.
+ */
+size_t ScoutMessages::epoch2utc(char* bfr, time_t val) {
+    struct tm *tmp = gmtime(&val);
+    return snprintf(
+        bfr, 16, "utc:%02d%02d%02d.00", tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
 }
 
 /*
@@ -36,13 +27,15 @@ size_t ScoutMessages::float2Nmea(char* bfr, float value, bool latFlag) {
  *
  * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44
  */
-size_t ScoutMessages::createPK001(systemState &state, char* bfr) {
+size_t ScoutMessages::createPK001(char* bfr, systemState &state) {
+    // wasting some memory here
     char latBfr[32] = {0};
     char lonBfr[32] = {0};
-    size_t len = 0;
+    char timeBfr[16] = {0};
     float2Nmea(latBfr, state.lat, true);
     float2Nmea(lonBfr, state.lng, false);
-    len = snprintf(bfr, 255, "PK001;%s,%s", latBfr, lonBfr);
-    bfr[len+1] = 0;
-    return len;
+    epoch2utc(timeBfr, state.time_read_system_time);
+    return snprintf(
+        bfr, 255, "PK001;%s,%s,%s,sog:0,cog:0,sta:00,batt:%.2f",
+        latBfr, lonBfr, timeBfr, state.bat);
 }

@@ -258,7 +258,7 @@ void Task_schedule(void *pvParameters) {
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
 
     if ( gps.updated && !state.message_sent ) {
-      scout_messages.createPK001(state, message);
+      scout_messages.createPK001(message, state);
       rockblock.sendMessage(message);
       state.message_sent = true;
     }
