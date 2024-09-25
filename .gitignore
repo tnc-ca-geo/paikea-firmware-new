@@ -34,3 +34,6 @@
 # platformio
 .pio
 .vscode
+
+# etc
+credstash.log

@@ -17,8 +17,9 @@ class ScoutMessages {
 
     public:
         static size_t createPK001(char* bfr, systemState &state);
-        static size_t float2Nmea(char* bfr, float val, bool latFlag=true);
+        static boolean parsePK006(systemState &state, char* bfr);
         static size_t epoch2utc(char* bfr, time_t val);
+        static size_t float2Nmea(char* bfr, float val, bool latFlag=true);
 
 };
 

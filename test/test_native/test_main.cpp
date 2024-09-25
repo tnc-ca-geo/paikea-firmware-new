@@ -20,5 +20,6 @@ int main() {
     RUN_TEST(test_createPK001);
     RUN_TEST(test_float2Nmea);
     RUN_TEST(test_epoch2utc);
+    RUN_TEST(test_parsePK006);
     return UNITY_END();
 }

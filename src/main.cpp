@@ -32,6 +32,7 @@ static TaskHandle_t storeUpTimeTaskHandle = NULL;
 static TaskHandle_t waitForSleepTaskHandle = NULL;
 static TaskHandle_t rockblockTaskHandle = NULL;
 
+
 // Initialize Hardware
 HardwareSerial gps_serial(1);
 HardwareSerial rockblock_serial(2);
@@ -48,7 +49,7 @@ systemState state;
 // Storage
 ScoutStorage storage = ScoutStorage();
 // Messages
-ScoutMessages scout_messages = ScoutMessages();
+ScoutMessages messages;
 
 
 void setTime(time_t time) {
@@ -106,13 +107,11 @@ void Task_blink(void *pvParamaters) {
 }
 
 /*
- * Synchronize system time with GPS time and trigger regular time calculations.
+ * Synchronize system time with GPS time and trigger time calculations.
  */
 void Task_time_sync(void *pvParameters) {
   for(;;) {
     syncTime();
-    // if ( gps.updated ) { state.setRealTime( gps.get_corrected_epoch(), true ); }
-    // else state.sync();
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
@@ -135,7 +134,6 @@ void Task_display(void *pvParameters) {
         vTaskDelete( displayTaskHandle );
       }
     } else {
-      time_t time = state.real_time;
       strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
       snprintf(
         out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
@@ -191,9 +189,6 @@ void Task_gps(void *pvParameters) {
       state.lng = gps.lng;
       state.gps_done = true;
       setTime( gps.get_corrected_epoch() );
-      // state.setLatitude(gps.lat);
-      // tate.setLongitude(gps.lng);
-      // state.setGpsDone(true);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.disable();
         xSemaphoreGive(mutex_i2c);
@@ -242,7 +237,9 @@ void Task_wait_for_sleep(void *pvParameters) {
  */
 void Task_message(void *pvParameters) {
   for (;;) {
-    if ( rockblock.available() ) rockblock.sendMessage((char*) "Hello world!\0");
+    if ( rockblock.available() ) {
+      rockblock.sendMessage((char*) "Hello world!\0");
+    }
     vTaskDelay( pdMS_TO_TICKS( 10000 ) );
   }
 }
@@ -258,7 +255,7 @@ void Task_schedule(void *pvParameters) {
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
 
     if ( gps.updated && !state.message_sent ) {
-      scout_messages.createPK001(message, state);
+      messages.createPK001(message, state);
       rockblock.sendMessage(message);
       state.message_sent = true;
     }
@@ -272,7 +269,6 @@ void Task_schedule(void *pvParameters) {
       // Sleep will wait until everyone is ready.
       state.go_to_sleep = true;
     }
-
   }
 }
 
