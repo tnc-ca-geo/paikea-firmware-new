@@ -51,14 +51,26 @@ ScoutStorage storage = ScoutStorage();
 // Messages
 ScoutMessages messages;
 
+/*
+ * Read system time and return UNIX epoch.
+ */
+time_t getTime() {
+  struct timeval tv_now;
+  gettimeofday(&tv_now, NULL);
+  return tv_now.tv_sec;
+}
 
+/*
+ * Set system time. Set corrected start time if start is not already set.
+ */
 void setTime(time_t time) {
   if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-    state.real_time = time;
-    state.time_read_system_time = esp_timer_get_time()/1E6;
-    if (state.first_fix) {
-      state.start_time = state.real_time - state.time_read_system_time;
-    }
+    struct timeval new_time;
+    time_t old_time = getTime();
+    new_time.tv_sec = time;
+    settimeofday(&new_time, NULL);
+    // state.time_read_system_time = esp_timer_get_time()/1E6;
+    if (!state.start_time) { state.start_time = time - old_time; }
     xSemaphoreGive(mutex_state);
   }
 }
@@ -69,49 +81,25 @@ time_t getNextWakeupTime(time_t now, uint16_t delay) {
   return full_hour + (cycles + 1) * delay;
 }
 
-void syncTime() {
-  if (xSemaphoreTake(mutex_state, 200) == pdTRUE) {
-    time_t set_time = esp_timer_get_time()/1E6;
-    time_t time = state.real_time + set_time - state.time_read_system_time;
-    state.real_time = time;
-    state.time_read_system_time = set_time;
-    state.expected_wakeup = getNextWakeupTime(time, state.frequency);
-    state.uptime = state.real_time - state.start_time;
-    xSemaphoreGive(mutex_state);
-  }
-}
-
 /*
- * Blink LED 10. This is a useful indicator for the system running. A mutex is
- * needed since the I2C bus is shared with display and I/O expander.
+ * Blink LED 1 and 0 as simple system indicator.
+ * A mutex is needed since the I2C bus is shared with display and I/O expander.
+ * TODO: move mutex to tca95xx module?
  *
- * TODO: Replace with a more sophisticated way of system state indication.
- * Start from the current firmware behavior.
+ * LED1 - Blink 1s before GPS fix
+ * LED1 - Solid after GPS fix.
+ * LED0 - Solid after radio transmitted.
+ * OFF - Sleep (triggered by resetting the expander in the sleep function)
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   for(;;) {
-    // deregister when LED is off
-    if (state.go_to_sleep && blink_state) {
-      state.blink_sleep_ready = true;
-      vTaskDelete( blinkTaskHandle );
-    } else {
-      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-        expander.digitalWrite(10, blink_state);
-        xSemaphoreGive(mutex_i2c);
-      }
-      blink_state = !blink_state;
+    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+      expander.digitalWrite( LED01, blink_state || state.gps_done );
+      expander.digitalWrite( LED00, state.rockblock_done );
+      xSemaphoreGive(mutex_i2c);
     }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
-  }
-}
-
-/*
- * Synchronize system time with GPS time and trigger time calculations.
- */
-void Task_time_sync(void *pvParameters) {
-  for(;;) {
-    syncTime();
+    blink_state = !blink_state;
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
@@ -125,6 +113,7 @@ void Task_display(void *pvParameters) {
   char message_string[255] = {0};
   char out_string[255] = {0};
   char time_string[22] = {0};
+  time_t time = 0;
   for(;;) {
     if ( state.display_off ) {
       Serial.println("Turn display off.");
@@ -134,7 +123,8 @@ void Task_display(void *pvParameters) {
         vTaskDelete( displayTaskHandle );
       }
     } else {
-      strftime(time_string, 22, "%F\n  %T", gmtime( &state.real_time ));
+      time = getTime();
+      strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
       snprintf(
         out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
         message_string);
@@ -143,7 +133,7 @@ void Task_display(void *pvParameters) {
         xSemaphoreGive(mutex_i2c);
       }
     }
-    vTaskDelay( pdMS_TO_TICKS( 50 ) );
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -188,7 +178,8 @@ void Task_gps(void *pvParameters) {
       state.lat = gps.lat;
       state.lng = gps.lng;
       state.gps_done = true;
-      setTime( gps.get_corrected_epoch() );
+      state.gps_read_time = gps.get_corrected_epoch();
+      setTime( state.gps_read_time );
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.disable();
         xSemaphoreGive(mutex_i2c);
@@ -201,14 +192,15 @@ void Task_gps(void *pvParameters) {
 
 /*
  * Waiting for all peripherials to be in the sleep ready state.
+ * Move to scheduling task.
  */
 void Task_wait_for_sleep(void *pvParameters) {
   char bfr[255];
   for (;;) {
     // Check for sleep once a second.
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
-    // Check whether system is ready to go to sleep, and persist values
-    if (state.gps_done && state.blink_sleep_ready && state.rockblock_done) {
+    // Check whether system is ready to go to sleep, persist values
+    if (state.gps_done && state.rockblock_done) {
       Serial.println("Going to sleep");
       // Sets expander to init state to conserve power.
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
@@ -220,11 +212,15 @@ void Task_wait_for_sleep(void *pvParameters) {
       // TODO: check actual state
       state.display_off = true;
       vTaskDelay( pdMS_TO_TICKS(300) );
-      uint32_t difference = state.expected_wakeup - state.real_time;
+      uint32_t difference = getNextWakeupTime(
+        getTime(), state.frequency ) - getTime();
+      // set minimum sleep time, just to ensure we are resetting here
+      if ( difference < MINIMUM_SLEEP ) { difference = MINIMUM_SLEEP; }
+      // set maximim sleep time, so that we don't loose the device
+      if ( difference > MAXIMUM_SLEEP ) { difference = MAXIMUM_SLEEP; }
       snprintf(
-        bfr, 255, "Frequency: %d, next send time: %d, difference: %d\n",
-        (uint32_t) state.frequency, (uint32_t) state.expected_wakeup,
-        difference);
+        bfr, 255, "Frequency: %d, difference: %d\n",
+        (uint32_t) state.frequency, difference);
       Serial.print(bfr);
       esp_sleep_enable_timer_wakeup( difference * 1E6 );
       esp_deep_sleep_start();
@@ -233,7 +229,8 @@ void Task_wait_for_sleep(void *pvParameters) {
 }
 
 /*
- * Task regularly sending messages (for radio only testing).
+ * DEBUG Task - regularly sending messages (for radio testing only).
+ * TODO: remove or use DEBUG flag
  */
 void Task_message(void *pvParameters) {
   for (;;) {
@@ -244,9 +241,27 @@ void Task_message(void *pvParameters) {
   }
 }
 
+/*
+ * DEBUG Task - Displaying time variables for debugging
+ * TODO: remove or use DEBUG flag
+ */
+void Task_time(void *pvParameters) {
+  for (;;) {
+    Serial.print("time: "); Serial.print(getTime());
+    Serial.print(", start time: "); Serial.print(state.start_time);
+    Serial.print(", uptime: "); Serial.print(getTime() - state.start_time);
+    Serial.print(", runtime: ");
+    Serial.print(int(esp_timer_get_time()/1E6));
+    Serial.println();
+    vTaskDelay( pdMS_TO_TICKS( 2000 ) );
+  }
+}
+
 
 /*
- * Task - Manage timing and logic of all components.
+ * Task - Manage timing and logic of all components
+ * TODO: Implement more abstract state machine here?
+ * TODO: Implement timeouts and retries
  */
 void Task_schedule(void *pvParameters) {
   char message[255] = {0};
@@ -254,21 +269,25 @@ void Task_schedule(void *pvParameters) {
 
     vTaskDelay( pdMS_TO_TICKS( 1000 ) );
 
+    // Wait until we get a fix and send message
     if ( gps.updated && !state.message_sent ) {
       messages.createPK001(message, state);
       rockblock.sendMessage(message);
       state.message_sent = true;
     }
 
+    // Wait for success and shut done Rockblock
     if ( state.message_sent && rockblock.getSendSuccess() ) {
       state.rockblock_done = true;
     }
 
+    // Initiate sleep state
     if ( gps.updated && state.message_sent ) {
-      // We are setting a flag informing all components to go into sleep state.
+      // We are setting a flag informing all components to go to sleep.
       // Sleep will wait until everyone is ready.
       state.go_to_sleep = true;
     }
+
   }
 }
 
@@ -292,6 +311,7 @@ void setup() {
   expander.begin(PORT_EXPANDER_I2C_ADDRESS);
   // ----- Init Blink -----------------------------
   expander.pinMode(10, EXPANDER_OUTPUT);
+  expander.pinMode(7, EXPANDER_OUTPUT);
    // ---- Give some time to stabilize -------------
   vTaskDelay( pdTICKS_TO_MS(100) );
 
@@ -320,11 +340,9 @@ void setup() {
    */
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
-  xTaskCreate(&Task_time_sync, "Task time sync", 4096, NULL, 10,
-    &timeSyncTaskHandle);
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
   xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
-  // xTaskCreate(&Task_message, "Task message", 4096, NULL, 14, NULL);
+  xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
   xTaskCreate(
     &Task_rockblock, "Task Rockblock", 4096, NULL, 10, &rockblockTaskHandle);
   // We are putting this in a task because at some point we need to stop

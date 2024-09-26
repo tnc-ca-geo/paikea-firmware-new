@@ -1,7 +1,7 @@
 #include "tca95xx.h"
 
 /*
- * Constructure passing a wire TwoWire instance.
+ * Constructor passing a TwoWire instance.
  */
 Expander::Expander(TwoWire& i2c) {
     wire = &i2c;

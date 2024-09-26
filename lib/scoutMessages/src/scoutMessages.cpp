@@ -34,7 +34,7 @@ size_t ScoutMessages::createPK001(char* bfr, systemState &state) {
     char timeBfr[16] = {0};
     float2Nmea(latBfr, state.lat, true);
     float2Nmea(lonBfr, state.lng, false);
-    epoch2utc(timeBfr, state.time_read_system_time);
+    epoch2utc(timeBfr, state.gps_read_time);
     return snprintf(
         bfr, 128, "PK001;%s,%s,%s,sog:0,cog:0,sta:00,batt:%.2f",
         latBfr, lonBfr, timeBfr, state.bat);

@@ -34,10 +34,10 @@ LoraRockblock::LoraRockblock(Expander &expander, HardwareSerial &serial) {
  */
 void LoraRockblock::sendAT(char *command, char *bfr) {
     this->serial->print(command);
-    Serial.println(command);
+    // Serial.println(command);
     vTaskDelay( pdMS_TO_TICKS( 50 ));
     this->readResponse(bfr);
-    Serial.println(bfr);
+    // Serial.println(bfr);
 }
 
 /*

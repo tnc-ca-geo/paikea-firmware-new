@@ -9,10 +9,6 @@
 #define ROCKBLOCK_SERIAL_TX_PIN 25
 #define ROCKBLOCK_SERIAL_SPEED 115200
 #define NUM_TIMERS 1
-#define SLEEP_TIME 300
-#define WAKE_TIME 60
-// time before we decide that we won't get a fix
-#define GPS_TIME_OUT 300
 
 /* Pin mapping
 ===  ========   === ======
@@ -51,5 +47,25 @@ ird_netav   1     5    1
 ird_cts     1     6    1
 ird_rts     1     7    0
 */
+
+
+// hardware constants
+#define LED01 10
+#define LED00 7
+// constants
+#define SLEEP_TIME 300
+#define WAKE_TIME 60
+// time before we decide that we won't get a fix
+#define GPS_TIME_OUT 300    // IMPLEMENT
+// time we wake up early (before send time)
+#define GPS_DELAY 20        // IMPLEMENT
+// Minimum reporting time, 300s = 5min
+#define MINIMUM_FREQ 300   // IMPLEMENT
+// Maximum regular reporting time, 86400s = 1day
+#define MAXIMUM_FREQ       // IMPLEMENT
+// Mininmum sleep time, 5s
+#define MINIMUM_SLEEP 5
+// Maximum sleep time, 259200s = 3 days
+#define MAXIMUM_SLEEP 259200
 
 #endif /* __PINDEFS_H__ */
