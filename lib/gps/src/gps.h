@@ -26,6 +26,9 @@ public:
     bool updated = false;
     float lat;
     float lng;
+    // implement those mainly for compatibility
+    float speed;
+    float heading;
     // Constructor
     Gps(Expander &expander, HardwareSerial &serial);
     // Methods

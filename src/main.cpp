@@ -177,6 +177,8 @@ void Task_gps(void *pvParameters) {
       sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
       state.lat = gps.lat;
       state.lng = gps.lng;
+      state.heading = gps.heading;
+      state.speed = gps.speed;
       state.gps_done = true;
       state.gps_read_time = gps.get_corrected_epoch();
       setTime( state.gps_read_time );
@@ -291,6 +293,17 @@ void Task_schedule(void *pvParameters) {
   }
 }
 
+/*
+ * Read the battery voltage (on start-up, no reason to get fancy here)
+ */
+float readBatteryVoltage() {
+  float readings=0;
+  for (uint8_t i=0; i<10; i++) {
+    readings += (float) analogReadMilliVolts(BATT_ADC)/10000;
+  }
+  return readings * (BATT_R_UPPER + BATT_R_LOWER)/BATT_R_LOWER;
+}
+
 
 void setup() {
   // ---- Start Serial for debugging --------------
@@ -312,7 +325,10 @@ void setup() {
   // ----- Init Blink -----------------------------
   expander.pinMode(10, EXPANDER_OUTPUT);
   expander.pinMode(7, EXPANDER_OUTPUT);
-   // ---- Give some time to stabilize -------------
+  // ---- Read battery voltage --------------------
+  state.bat = readBatteryVoltage();
+  Serial.print("Battery: "); Serial.println(state.bat);
+  // ---- Give some time to stabilize -------------
   vTaskDelay( pdTICKS_TO_MS(100) );
 
   /*

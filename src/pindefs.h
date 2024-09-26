@@ -52,6 +52,12 @@ ird_rts     1     7    0
 // hardware constants
 #define LED01 10
 #define LED00 7
+// battery voltage measurement network
+#define ADC_VREF 3.3
+#define BATT_ADC 39
+#define BATT_R_UPPER 100 // kOhm, upper R13 of voltage divider
+#define BATT_R_LOWER 100 // kOhm. lower R11 of voltage divider
+#define BATT_FUDGE 1.1 // everyone seems to add a fudge factor here
 // constants
 #define SLEEP_TIME 300
 #define WAKE_TIME 60
