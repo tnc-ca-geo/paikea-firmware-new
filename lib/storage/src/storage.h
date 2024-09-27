@@ -7,6 +7,8 @@
 #include <Preferences.h>
 #include <stateType.h>
 
+#define FIRST_WAKE_TIME 60
+#define WAKE_TIME 30
 
 inline RTC_DATA_ATTR time_t rtc_start = 0;
 inline RTC_DATA_ATTR time_t rtc_prior_uptime = 0;

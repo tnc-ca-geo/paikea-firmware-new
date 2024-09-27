@@ -4,7 +4,6 @@
 #define DEV_EUI "FFFFFFFFFFFF0002"
 #define APP_KEY "D44245A81B1220776D628D03095CA7E9"
 
-
 /*
  * Parse a single integer into state.
  */
@@ -34,10 +33,8 @@ LoraRockblock::LoraRockblock(Expander &expander, HardwareSerial &serial) {
  */
 void LoraRockblock::sendAT(char *command, char *bfr) {
     this->serial->print(command);
-    // Serial.println(command);
     vTaskDelay( pdMS_TO_TICKS( 50 ));
     this->readResponse(bfr);
-    // Serial.println(bfr);
 }
 
 /*
@@ -86,7 +83,6 @@ bool LoraRockblock::configure() {
     return true;
 }
 
-
 void LoraRockblock::beginJoin() {
     char command[] = "AT+CJOIN=1,1,8,16\r";
     Serial.println("Start join.");
@@ -118,11 +114,8 @@ void LoraRockblock::sendMessage(char *bfr, size_t len) {
     this->sending = 1;
 }
 
-
 bool LoraRockblock::available() {
-    if (!this->sending) {
-        return true;
-    }
+    if (!this->sending) { return true; }
 }
 
 /*
@@ -141,9 +134,7 @@ void LoraRockblock::readResponse(char *buffer) {
 }
 
 // getters for private properties
-int32_t LoraRockblock::getRssi() {
-    return this->lastRssi;
-}
+int32_t LoraRockblock::getRssi() { return this->lastRssi; }
 
 /*
  * Getter for last message.
@@ -155,9 +146,7 @@ size_t LoraRockblock::getLastMessage(char *bfr) {
     return len;
 }
 
-bool LoraRockblock::getSendSuccess() {
-    return this->sendSuccess;
-}
+bool LoraRockblock::getSendSuccess() { return this->sendSuccess; }
 
 /*
  * Parse incoming message LoraWAN message.
@@ -205,7 +194,6 @@ void LoraRockblock::readSerial() {
     }
 }
 
-
 /*
  * Update state and correct inconsistencies.
  */
@@ -227,11 +215,6 @@ void LoraRockblock::updateStateLogic() {
 void LoraRockblock::loop() {
     this->readSerial();
     this->updateStateLogic();
-    // Serial.print("Status: "); Serial.print(this->status);
-    // Serial.print(", Join ok: "); Serial.print(this->joinOk);
-    // Serial.print(", Join failure: "); Serial.print(this->joinFailure);
-    // Serial.print(", send success: "); Serial.print(this->sendSuccess);
-    // Serial.print(", last incoming: "); Serial.println(this->lastMessage);
     this->serial->write("AT+CSTATUS?\r");
 }
 

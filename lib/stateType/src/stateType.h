@@ -8,14 +8,14 @@
 typedef struct {
     time_t start_time = 0;
     time_t gps_read_time = 0;
-    // time_t expected_wakeup = 0;
-    // uint32_t uptime = 0;
+    uint32_t time_out = 300;
     uint32_t prior_uptime = 0;
     uint32_t frequency = 120;
     bool go_to_sleep = 0;
     bool gps_done = 0;
     bool message_sent = 0;
-    bool display_off; // TODO: remove
+    // make sure that is true otherwise application will hang in production mode
+    bool display_off = true;
     bool rockblock_done = 0;
     bool send_success; // TODO: remove
     float lat=999;

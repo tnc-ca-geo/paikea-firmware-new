@@ -60,7 +60,8 @@ ird_rts     1     7    0
 #define BATT_FUDGE 1.1 // everyone seems to add a fudge factor here
 // constants
 #define SLEEP_TIME 300
-#define WAKE_TIME 60
+// give more time on first run
+#define RETRY_TIME 120
 // time before we decide that we won't get a fix
 #define GPS_TIME_OUT 300    // IMPLEMENT
 // time we wake up early (before send time)

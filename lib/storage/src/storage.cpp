@@ -12,11 +12,12 @@ void ScoutStorage::restore(systemState &state) {
         state.frequency = rtc_frequency;
         Serial.print("Last uptime: ");
         Serial.println((uint32_t) rtc_prior_uptime);
-        // rtc_expected_wakeup = 0;
+        state.time_out = FIRST_WAKE_TIME;
     } else {
         // state.time_read_system_time = esp_timer_get_time()/1E6;
         state.prior_uptime = rtc_prior_uptime;
         state.start_time = rtc_start;
+        state.time_out = WAKE_TIME;
     }
 }
 
