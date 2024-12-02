@@ -137,7 +137,7 @@ void Task_display(void *pvParameters) {
         display.set(out_string);
         xSemaphoreGive(mutex_i2c);
       }
-    }
+    }vTaskDelay( pdMS_TO_TICKS( 200 ) );
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
@@ -276,13 +276,9 @@ void Task_schedule(void *pvParameters) {
 
     // Wait for success and shut done Rockblock
     if ( state.message_sent && rockblock.getSendSuccess() ) {
+      rockblock.getLastMessage(message);
+      Serial.print("Message: "); Serial.println(message);
       state.rockblock_done = true;
-    }
-
-    // Prepare for sleep state
-    if ( gps.updated && state.message_sent ) {
-      // We are setting a flag informing all components to go to sleep.
-      // Sleep will wait until everyone is ready.
       state.go_to_sleep = true;
     }
 
