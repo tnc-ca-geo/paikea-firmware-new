@@ -36,12 +36,12 @@ void test_createPK001() {
     systemState state;
     state.lat = 35.5;
     state.lng = -122;
-    state.time_read_system_time = 1726686649;
+    state.gps_read_time = 1726686649;
     state.bat = 4.2;
     messages.createPK001(bfr, state);
     TEST_ASSERT_EQUAL_STRING(
         "PK001;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049.00,"
-        "sog:0,cog:0,sta:00,batt:4.20", bfr);
+        "sog:0.000,cog:0,sta:00,batt:4.20", bfr);
 }
 
 

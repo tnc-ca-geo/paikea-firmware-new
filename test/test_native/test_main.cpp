@@ -1,6 +1,4 @@
 #include <unity.h>
-// #include "test_state.h"
-// #include "test_loraRockblock.h"
 #include "test_scoutMessages.h"
 #define UNITY_INCLUDE_DOUBLE
 #define UNITY_DOUBLE_PRECISION 1e-12
