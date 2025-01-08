@@ -1,10 +1,7 @@
 #include <unity.h>
-#include "test_loraRockblock.h"
-#ifndef UNITY_INCLUDE_DOUBLE
+#include "test_rockblock.h"
 #define UNITY_INCLUDE_DOUBLE
-#endif
 #define UNITY_DOUBLE_PRECISION 1e-12
-
 
 void setUp() {}
 
@@ -12,8 +9,8 @@ void tearDown() {}
 
 int runUnityTests() {
     UNITY_BEGIN();
-    // testy loraRockblock
-    RUN_TEST(test_parse_integer);
+    // test rockblock
+    RUN_TEST(test_first);
     return UNITY_END();
 }
 

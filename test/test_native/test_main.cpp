@@ -1,7 +1,6 @@
 #include <unity.h>
 #include "test_scoutMessages.h"
-#define UNITY_INCLUDE_DOUBLE
-#define UNITY_DOUBLE_PRECISION 1e-12
+#include "test_rockBlock.h"
 
 void setUp() {}
 
@@ -19,5 +18,6 @@ int main() {
     RUN_TEST(test_float2Nmea);
     RUN_TEST(test_epoch2utc);
     RUN_TEST(test_parsePK006);
+    RUN_TEST(test_test);
     return UNITY_END();
 }
