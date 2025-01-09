@@ -7,14 +7,14 @@
 #include <display.h>
 #include <pindefs.h>
 #include <rockblock.h>
+#include <hal.h>
 
 
-HardwareSerial rockblock_serial(2);
+RockblockSerial rockblock_serial = RockblockSerial();
 // Port Expander using i2c
 Expander expander = Expander(Wire);
 // GPS using UART
 Rockblock rockblock = Rockblock(expander, rockblock_serial);
-
 
 /*
  * Create test message if Rockblock available
@@ -43,10 +43,13 @@ void setup() {
     Serial.begin(115200);
     Wire.begin();
     expander.begin(PORT_EXPANDER_I2C_ADDRESS);
+    rockblock.toggle(true);
     rockblock_serial.begin(ROCKBLOCK_SERIAL_SPEED, SERIAL_8N1,
         ROCKBLOCK_SERIAL_RX_PIN, ROCKBLOCK_SERIAL_TX_PIN);
     xTaskCreate(&TaskRockblock, "Task rockblock", 4096, NULL, 0, NULL);
     xTaskCreate(&TaskMessage, "Task message", 4096, NULL, 1, NULL);
 }
 
-void loop() {}
+void loop() {
+    vTaskDelay( pdMS_TO_TICKS(1000) );
+}

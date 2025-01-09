@@ -28,7 +28,22 @@ const uint8_t TCA95_DEFAULTS[8] = {
 // https://forum.arduino.cc/t/i2c-is-it-possible-to-catch-error-no-bus-or-no-slave/456662
 
 
-class Expander {
+class AbstractExpander {
+
+public:
+    AbstractExpander() {};
+    virtual void begin(uint8_t i2c_address) = 0;
+    virtual void init() = 0;
+    virtual void pinMode(uint8_t pin, bool mode) = 0;
+    virtual void pinMode(uint8_t port, uint8_t bit, bool mode) = 0;
+    virtual void digitalWrite(uint8_t pin, bool value) = 0;
+    virtual void digitalWrite(uint8_t port, uint8_t bit, bool value) = 0;
+    virtual bool digitalRead(uint8_t pin) = 0;
+    virtual bool digitalRead(uint8_t port, uint8_t bit) = 0;
+};
+
+#ifndef NATIVE
+class Expander: public AbstractExpander {
 
 private:
     uint8_t address;
@@ -57,5 +72,7 @@ public:
     bool digitalRead(uint8_t pin);
     bool digitalRead(uint8_t port, uint8_t bit);
 };
+
+#endif /* NATIVE */
 
 #endif /* __TCA95XX_H__ */

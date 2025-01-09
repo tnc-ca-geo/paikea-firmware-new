@@ -1,9 +1,15 @@
 #include "tca95xx.h"
 
+#ifndef NATIVE
+
 /*
  * Constructor passing a TwoWire instance.
  */
 Expander::Expander(TwoWire& i2c) {
+    Serial.println("Initializing Expander");
+    Serial.println("---------------------");
+    Serial.println("---------------------");
+    Serial.println("---------------------");
     wire = &i2c;
 }
 
@@ -12,6 +18,8 @@ Expander::Expander(TwoWire& i2c) {
  */
 void Expander::begin(uint8_t i2c_address) {
     this->address = i2c_address;
+    Serial.print("ADDRESS ");
+    Serial.println(i2c_address);
     this->init();
 }
 
@@ -110,3 +118,5 @@ bool Expander::digitalRead(uint8_t pin) {
 bool Expander::digitalRead(uint8_t port, uint8_t pos) {
     return this->read(port) & 1 << pos;
 }
+
+#endif

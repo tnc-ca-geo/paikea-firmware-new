@@ -16,9 +16,8 @@ enum Status { WAIT_STATUS, OK_STATUS, READY_STATUS, ERROR_STATUS };
 
 size_t find(char* bfr, size_t maxLen, const char* token, size_t tokenLen) {
     size_t idx = 0;
-    bool found = true;
     while (bfr[idx] != 0 && idx < maxLen - tokenLen) {
-        found = true;
+        bool found = true;
         for (size_t i=0; i<tokenLen; i++) {
             if (bfr[idx+i] != token[i]) {
                 found = false;
@@ -54,7 +53,7 @@ void extractFrameByToken(char* bfr, char* serialBuffer, const char* token) {
  * Initialize Rockblock instance by passing IO expander and HardwareSerial
  * reference.
  */
-Rockblock::Rockblock(Expander &expander, HardwareSerial &serial) {
+Rockblock::Rockblock(AbstractExpander &expander, AbstractSerial &serial) {
     this->expander = &expander;
     this->serial = &serial;
 }
@@ -63,30 +62,12 @@ bool Rockblock::available() {
     return this->enabled && !this->queued && !this->sending;
 }
 
-void Rockblock::beginJoin() {}
-
-bool Rockblock::configure() {
-    return true;
-}
-
 void Rockblock::sendMessage(char *bfr, size_t len) {
     Serial.println("Queuing message");
     snprintf(this->message, 340, "%s\r", bfr);
     this->serial->print(SBDWT_COMMAND);
     this->queued = true;
 };
-
-/*
- * Full AT serial roundtrip, use to set configuration values.
- */
-void Rockblock::sendAT(char *command, char *bfr) {
-    this->serial->print(command);
-    // TODO: The module need some time to fully respond, create in a more async
-    // manner since even 300ms are not enough for a full roundtrip to the
-    // satellite or timeout
-    // vTaskDelay( pdMS_TO_TICKS( 1000 ));
-    this->readResponse(bfr);
-}
 
 /*
  * Read Serial Response
@@ -103,15 +84,16 @@ void Rockblock::readResponse(char *bfr) {
 }
 
 void Rockblock::toggle(bool on) {
-    Serial.print("Toggle Rockblock ");
-    Serial.println(on ? "ON" : "OFF");
+    this->enabled = false;
     this->expander->pinMode(13, EXPANDER_OUTPUT);
     this->expander->digitalWrite(13, !on);
     // We issue a command to receive at least one OK before reading additional
     // data. We are using a command that does not have any influence on the
-    // state other than setting enabled on.
-    this->serial->print("AT\r");
-    // this->enabled = on;
+    // state other than setting enabled on. An OK response will toggle the
+    // Rocklock
+    if (on) {
+        this->serial->print("AT\r");
+    }
 }
 
 /*
@@ -154,14 +136,23 @@ void Rockblock::parseResponse() {
     }
 
     if (status == WAIT_STATUS) {
-        return;
+        // Serial.print("MESSAGE WAITING: "); Serial.println(this->messageWaiting);
+        // Serial.print("INTERNAL TIME: "); Serial.println(this->internalTime);
+        // Serial.print("NEXT TRY: "); Serial.println(this->nextTry);
+        // Check for queued message in MO and attempt sending if retry time is up.
+        if (this->messageWaiting && this->nextTry < this->internalTime) {
+            this->serial->print(SBDIX_COMMAND);
+            this->nextTry += 5;
+            this->sending = true;
+        }
     }
 
     if (status == READY_STATUS) {
         // initialize sending
+        Serial.println("SENDING MESSAGE");
         this->serial->print(this->message);
         this->messageWaiting = true;
-        this->nextTry = esp_timer_get_time() / 1e6;
+        this->nextTry = this->internalTime;
         return;
     }
 
@@ -178,16 +169,9 @@ void Rockblock::parseResponse() {
         }
     }
 
-    // Check for queued message in MO and attempt sending if retry time is up.
-    if (this->messageWaiting && nextTry < this -> internalTime) {
-        this->serial->print(SBDIX_COMMAND);
-        this->nextTry += 5;
-        this->sending = true;
-    }
-
 }
 
 void Rockblock::loop(int64_t time) {
-    this -> internalTime = time / 1E6;
-    this -> parseResponse();
+    this->internalTime = time / 1E6;
+    this->parseResponse();
 }
