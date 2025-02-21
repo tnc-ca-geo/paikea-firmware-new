@@ -39,8 +39,8 @@ class MockExpander: public AbstractExpander {
         void pinMode(uint8_t port, uint8_t bit, bool mode) override {};
         void digitalWrite(uint8_t pin, bool value) override {};
         void digitalWrite(uint8_t port, uint8_t bit, bool value) override {};
-        bool digitalRead(uint8_t pin) override {};
-        bool digitalRead(uint8_t port, uint8_t bit) override {};
+        bool digitalRead(uint8_t pin) override { return true; };
+        bool digitalRead(uint8_t port, uint8_t bit) override { return true; };
 };
 
 

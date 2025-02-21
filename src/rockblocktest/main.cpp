@@ -16,6 +16,8 @@ Expander expander = Expander(Wire);
 // GPS using UART
 Rockblock rockblock = Rockblock(expander, rockblock_serial);
 
+static TaskHandle_t messageTaskHandle = NULL;
+
 /*
  * Create test message if Rockblock available
  */
@@ -26,6 +28,7 @@ void TaskMessage(void *pvParameters) {
         if (rockblock.available()) {
             snprintf(message, 64, "Hello world!");
             rockblock.sendMessage(message);
+            vTaskDelete(messageTaskHandle);
         }
         vTaskDelay( pdMS_TO_TICKS(5000) );
     }
@@ -43,9 +46,9 @@ void setup() {
     Serial.begin(115200);
     Wire.begin();
     expander.begin(PORT_EXPANDER_I2C_ADDRESS);
-    rockblock.toggle(true);
     rockblock_serial.begin(ROCKBLOCK_SERIAL_SPEED, SERIAL_8N1,
         ROCKBLOCK_SERIAL_RX_PIN, ROCKBLOCK_SERIAL_TX_PIN);
+    rockblock.toggle(true);
     xTaskCreate(&TaskRockblock, "Task rockblock", 4096, NULL, 0, NULL);
     xTaskCreate(&TaskMessage, "Task message", 4096, NULL, 1, NULL);
 }
