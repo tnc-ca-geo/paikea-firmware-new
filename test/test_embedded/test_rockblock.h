@@ -39,3 +39,15 @@ void testParseFrame() {
     TEST_ASSERT_EQUAL_STRING("", parser.command);
     TEST_ASSERT_EQUAL_STRING("", parser.response);
 }
+
+void testParseValues() {
+    // this test relays on Frameparser.parse since parseValues is private
+    char testData[] = "AT+CSQ\r\n+SBDIX:0,1,20,3,4,5\r\nOK\r\n";
+    std::vector<int16_t> expectedValues = {0, 1, 20, 3, 4, 5};
+    FrameParser parser = FrameParser();
+    parser.parse(testData);
+    TEST_ASSERT_EQUAL_INT16(6, parser.values.size());
+    for (size_t i = 0; i < parser.values.size(); ++i) {
+        TEST_ASSERT_EQUAL_INT16(expectedValues[i], parser.values[i]);
+    }
+}

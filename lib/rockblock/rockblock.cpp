@@ -1,5 +1,6 @@
 #include <rockblock.h>
 #include <cstring>
+#include <vector>
 
 #define MAX_FRAME_SIZE 255
 #define OK_TOKEN "OK"
@@ -45,44 +46,59 @@ void extractFrame(char* bfr, char* serialBuffer) {
     strcpy(serialBuffer, pos + strlen(stringConstants[idx]) + 2);
 }
 
-
 /*
  * Parse a response line
  */
-void FrameParser::parseResponse(const char * line) {
-    char* pos = strstr(line, ":");
-    if (pos != nullptr) {
-        Serial.print("values: "); Serial.println(pos+1);
+void FrameParser::parseResponse(const char *line) {
+    char *token;
+    char *rest_ptr = NULL;
+    char copy_of_line[MAX_FRAME_SIZE] = {0};
+    this->values.clear();
+    std::strncpy(copy_of_line, line, MAX_FRAME_SIZE);
+    token = strtok_r(copy_of_line, ":", &rest_ptr);
+    token = strtok_r(NULL, ",", &rest_ptr);
+    while (token != NULL) {
+        this->values.push_back(std::stoi(token));
+        token = strtok_r(NULL, ",", &rest_ptr);
     }
 }
-
 
 /*
  * Parse a Rockblock Serial frame
  */
 void FrameParser::parse(const char *frame) {
     // strtok will consume the buffer, using a copy for now
+    // TODO: optimize once we don't need buffer elsewhere
+    char *token;
+    char *rest_ptr = NULL;
     char copy_of_frame[MAX_FRAME_SIZE] = {0};
     std::strncpy(copy_of_frame, frame, MAX_FRAME_SIZE);
-    char *token = std::strtok(copy_of_frame, "\r\n");
+    // use strtok_r since we have nested strtok calls
+    token = strtok_r(copy_of_frame, "\r\n", &rest_ptr);
     size_t idx = 0;
-    // re-setting default values
+    // re-setting default values, i.e. \0 and WAIT_STATUS
     this->status = WAIT_STATUS;
     memset(this->command, 0, MAX_COMMAND_SIZE);
     memset(this->response, 0, MAX_RESPONSE_SIZE);
+    // parse lines for initial command,
+    // response, and status
     while (token != NULL) {
+        // command
         if (idx==0) {
             strncpy(this->command, token, MAX_COMMAND_SIZE);
         }
+        // parse response if available
         if (idx==1) {
             if  (token[0] == '+') {
-                this->parseResponse(token);
                 memset(this->response, 0, MAX_RESPONSE_SIZE);
                 strncpy(this->response, token, MAX_RESPONSE_SIZE);
+                this->parseResponse(token);
             } else {
                 this->response[0] = '\0';
             }
         }
+        // status which could occur on the second or third line depending
+        // on the response
         if (idx > 0) {
             if (strstr(token, OK_TOKEN) != nullptr) {
                 this->status = OK_STATUS;
@@ -94,7 +110,8 @@ void FrameParser::parse(const char *frame) {
                 this->status = WAIT_STATUS;
             }
         }
-        token = std::strtok(NULL, "\r\n");
+        // get next token
+        token = strtok_r(NULL, "\r\n", &rest_ptr);
         idx++;
     }
 }
@@ -198,30 +215,9 @@ void Rockblock::parseResponse() {
     char frame[255] = {0};
 
     // copy latest incoming serial data to this->stream
-    // TODO: include into extract frame?
     this->readAndAppendResponse();
     extractFrame(frame, this->stream);
     this->parser.parse(frame);
-
-    /*
-    // frame should be empty, check for OK frame
-    extractFrameByToken(frame, this->stream, OK_TOKEN);
-    status = (frame[0] != '\0') ? OK_STATUS : WAIT_STATUS;
-
-    // check for error frame
-    if (frame[0] == 0) {
-        extractFrameByToken(frame, this->stream, ERROR_TOKEN);
-        status = (frame[0] != '\0') ? ERROR_STATUS : WAIT_STATUS;
-    }
-    // check for ready frame
-    if (frame[0] == 0) {
-        extractFrameByToken(frame, this->stream, READY_TOKEN);
-        status = (frame[0] != '\0') ? READY_STATUS : WAIT_STATUS;
-    }
-
-    // TODO: Move to private vars
-    FrameParser parser;
-    */
 
     // Some debug output
     if (frame[0] != 0) {
@@ -229,6 +225,11 @@ void Rockblock::parseResponse() {
         Serial.print("Last command: "); Serial.println(this->parser.command);
         Serial.print("Last response: "); Serial.println(this->parser.response);
         Serial.print("Status: "); Serial.println(this->parser.status);
+        Serial.print("Values: ");
+        for (size_t i = 0; i < this->parser.values.size(); i++) {
+            Serial.print(this->parser.values[i]); Serial.print(", ");
+        }
+        Serial.println();
     }
 
     // READY_STATUS means that the Rockblock is ready for text input. This can

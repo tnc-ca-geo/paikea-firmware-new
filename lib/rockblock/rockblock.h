@@ -24,7 +24,7 @@ class FrameParser {
         char command[MAX_COMMAND_SIZE] = {0};
         char response[MAX_RESPONSE_SIZE] = {0};
         RockblockStatus status = WAIT_STATUS;
-        std::vector<uint8_t> values;
+        std::vector<int16_t> values;
         void parse(const char *frame);
 };
 
