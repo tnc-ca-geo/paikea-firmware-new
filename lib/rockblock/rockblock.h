@@ -4,6 +4,7 @@
 #include <tca95xx.h>
 #include <hal.h>
 #include <vector>
+#include <map>
 
 #define MAX_COMMAND_SIZE 100
 #define MAX_RESPONSE_SIZE 100
@@ -11,10 +12,10 @@
 
 // Rockblock status type
 enum RockblockStatus { WAIT_STATUS, OK_STATUS, READY_STATUS, ERROR_STATUS };
+
 // State machine type
 enum StateMachine {
     IDLE, WAITING_FOR_INPUT, ATTEMPT_SENDING, MESSAFE_IN_INBOX };
-
 
 class FrameParser {
     private:

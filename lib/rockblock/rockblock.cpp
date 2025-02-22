@@ -7,6 +7,14 @@
 #define ERROR_TOKEN "ERROR"
 #define READY_TOKEN "READY"
 
+// that unfortunately needs the Arduino String class to be printable
+std::map<RockblockStatus, String> statusLabels = {
+    {WAIT_STATUS, "WAIT"},
+    {OK_STATUS, "OK"},
+    {READY_STATUS, "READY"},
+    {ERROR_STATUS, "ERROR"}
+};
+
 const char* SBDWT_COMMAND = "AT+SBDWT\r\n";
 const char* SBDIX_COMMAND = "AT+SBDIX\r\n";
 // measure signal strength command
@@ -224,7 +232,8 @@ void Rockblock::parseResponse() {
         Serial.println();
         Serial.print("Last command: "); Serial.println(this->parser.command);
         Serial.print("Last response: "); Serial.println(this->parser.response);
-        Serial.print("Status: "); Serial.println(this->parser.status);
+        Serial.print("Status: ");
+        Serial.println(statusLabels[this->parser.status]);
         Serial.print("Values: ");
         for (size_t i = 0; i < this->parser.values.size(); i++) {
             Serial.print(this->parser.values[i]); Serial.print(", ");
@@ -256,16 +265,20 @@ void Rockblock::parseResponse() {
     }
 
     if (parser.status == OK_STATUS) {
-        Serial.println("OK STATUS");
         // Any ok status means that the device is enabled
         this->enabled = true;
         this->commandWaiting = false;
         // Check for signal strength
-        int8_t signalStrength = parseCsqResponse(frame);
-        Serial.print("Signal strength: "); Serial.println(signalStrength);
-        if (signalStrength > 2) {
-            Serial.println("Attempting to send message");
-            // sendCommand(SBDIX_COMMAND);
+        if (
+            strstr(this->parser.command, "CSQ") != nullptr) {
+                Serial.print("Signal strength: ");
+                Serial.println(this->parser.values[0]);
+            if (this->parser.values[0] > 2) {
+                Serial.println("Attempting to send message");
+                sendCommand(SBDIX_COMMAND);
+            } else {
+                Serial.println("Signal strength too low");
+            }
         }
         // Check for send success
         parseSbdixResponse(frame);
