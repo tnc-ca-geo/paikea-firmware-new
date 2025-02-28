@@ -12,6 +12,8 @@ int runUnityTests() {
     RUN_TEST(testExtractFrame);
     RUN_TEST(testParseFrame);
     RUN_TEST(testParseValues);
+    RUN_TEST(testPayloadParsing);
+    RUN_TEST(testPayloadParsingMultipleLines);
     return UNITY_END();
 }
 

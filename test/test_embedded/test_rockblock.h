@@ -51,3 +51,23 @@ void testParseValues() {
         TEST_ASSERT_EQUAL_INT16(expectedValues[i], parser.values[i]);
     }
 }
+
+void testPayloadParsing() {
+    char testData[] = "AT+SBDRT\r\n+SBDRT:\r\npayload\r\nOK\r\n";
+    FrameParser parser = FrameParser();
+    parser.parse(testData);
+    TEST_ASSERT_EQUAL_STRING("payload", parser.payload);
+}
+
+void testPayloadParsingMultipleLines() {
+    char testData[] = "AT+SBDRT\r\n+SBDRT:\r\nfirst\r\nsecond\r\nOK\r\n";
+    FrameParser parser = FrameParser();
+    parser.parse(testData);
+    TEST_ASSERT_EQUAL_INT16(1, parser.status);
+    TEST_ASSERT_EQUAL_STRING("first\r\nsecond", parser.payload);
+    /* char testData1[] =
+        "AT+SBDRT\r\n+SBDRT:\r\nfirst\r\n\r\nsecond\r\n\r\nOK\r\n";
+    parser.parse(testData1);
+    TEST_ASSERT_EQUAL_STRING("first\r\n\r\nsecond", parser.payload);
+    */
+}
