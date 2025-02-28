@@ -25,19 +25,19 @@ void TaskMessage(void *pvParameters) {
     char message[64] = {0};
     rockblock.toggle(true);
     for (;;) {
-        if (rockblock.available()) {
+        if (rockblock.sendSuccess) { vTaskDelete(messageTaskHandle); }
+        if (rockblock.state == IDLE) {
             snprintf(message, 64, "Hello world!");
             rockblock.sendMessage(message);
-            vTaskDelete(messageTaskHandle);
         }
-        vTaskDelay( pdMS_TO_TICKS(5000) );
+        vTaskDelay( pdMS_TO_TICKS( 500 ) );
     }
 }
 
 
 void TaskRockblock(void *pvParameters) {
     for (;;) {
-        rockblock.loop( esp_timer_get_time() );
+        rockblock.loop();
         vTaskDelay( pdMS_TO_TICKS( 300 ) );
     }
 }
@@ -48,9 +48,9 @@ void setup() {
     expander.begin(PORT_EXPANDER_I2C_ADDRESS);
     rockblock_serial.begin(ROCKBLOCK_SERIAL_SPEED, SERIAL_8N1,
         ROCKBLOCK_SERIAL_RX_PIN, ROCKBLOCK_SERIAL_TX_PIN);
-    rockblock.toggle(true);
+    // rockblock.toggle(true);
     xTaskCreate(&TaskRockblock, "Task rockblock", 4096, NULL, 0, NULL);
-    xTaskCreate(&TaskMessage, "Task message", 4096, NULL, 1, NULL);
+    xTaskCreate(&TaskMessage, "Task message", 4096, NULL, 1, &messageTaskHandle);
 }
 
 void loop() {

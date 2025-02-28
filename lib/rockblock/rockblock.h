@@ -1,3 +1,8 @@
+/*
+ * Partially implements the Rockblock API as needed by Scout
+ *
+ * See https://docs.groundcontrol.com/iot/rockblock/user-manual/at-commands
+ */
 #ifndef __ROCKBLOCK_H__
 #define __ROCKBLOCK_H__
 #include <Arduino.h>
@@ -12,11 +17,11 @@
 
 // Rockblock status type
 enum RockblockStatus { WAIT_STATUS, OK_STATUS, READY_STATUS, ERROR_STATUS };
-
 // State machine type
 enum StateMachine {
-    IDLE, WAITING_FOR_INPUT, ATTEMPT_SENDING, MESSAFE_IN_INBOX };
+    OFFLINE, IDLE, MESSAGE_WAITING, MESSAGE_IN_RB, COM_CHECK, SENDING };
 
+// Parse Serial frames
 class FrameParser {
     private:
         void parseResponse(const char *line);
@@ -29,7 +34,7 @@ class FrameParser {
         void parse(const char *frame);
 };
 
-
+// Rockblock state machine
 class Rockblock {
 
     private:
@@ -41,27 +46,20 @@ class Rockblock {
         char stream[1000] = {0};
         // pointer to stream_index address
         uint16_t streamIdx = 0;
+        bool on = false;
         bool queued = false;
-        bool sending = false;
-        bool messageWaiting = false;
         bool commandWaiting = false;
-        time_t nextTry = 0;
-        time_t internalTime = 0;
         void readAndAppendResponse();
-        void parseResponse();
         void sendCommand(const char *command);
-        void parseSbdixResponse(const char *frame);
-        int8_t parseCsqResponse(const char *frame);
 
     public:
         Rockblock(AbstractExpander &expander, AbstractSerial &serial);
-        bool enabled;
-        bool available();
-        void emptyQueue();
+        StateMachine state = OFFLINE;
+        bool sendSuccess = false;
         void sendMessage(char *buffer, size_t len=255);
         void toggle(bool on=false);
         // process loop, we passing in the timer for better testibility,
-        void loop(int64_t time);
+        void loop();
 };
 
 #endif

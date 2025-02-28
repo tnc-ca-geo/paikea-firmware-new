@@ -7,30 +7,26 @@
 #define ERROR_TOKEN "ERROR"
 #define READY_TOKEN "READY"
 
-// that unfortunately needs the Arduino String class to be printable
+// This unfortunately requires the Arduino String class to be printable.
 std::map<RockblockStatus, String> statusLabels = {
-    {WAIT_STATUS, "WAIT"},
-    {OK_STATUS, "OK"},
-    {READY_STATUS, "READY"},
+    {WAIT_STATUS, "WAIT"}, {OK_STATUS, "OK"}, {READY_STATUS, "READY"},
     {ERROR_STATUS, "ERROR"}
 };
 
+/*
+ * Those are the implemented Rockblock commands
+ */
+// Basic AT interaction
+const char* AT_COMMAND = "AT\r\n";
+// Create a prompt to store text message
 const char* SBDWT_COMMAND = "AT+SBDWT\r\n";
+// We could extent on the SBDIX command since it would take a location as
+// argument which might save payload size.
 const char* SBDIX_COMMAND = "AT+SBDIX\r\n";
 // measure signal strength command
 const char* CSQ_COMMAND = "AT+CSQ\r\n";
 // clear MO buffer command
-const char* SBDD_COMMAND = "AT+SBDD0\r\n";
-
-
-/*
- * Find a token in a buffer and return the index. If not found, return -1.
- */
-int16_t find(const char* bfr, size_t maxLen, const char* token) {
-    const char* pos = strstr(bfr, token);
-    if (pos != nullptr && (pos - bfr) < maxLen) { return pos - bfr; }
-    return -1;
-}
+const char* SBDD_COMMAND = "AT+SBDD2\r\n";
 
 /*
  * Extract a frame by token and remove it from the incoming serialBuffer.
@@ -55,19 +51,18 @@ void extractFrame(char* bfr, char* serialBuffer) {
 }
 
 /*
- * Parse a response line
+ * Parses a response line from the Rockblock device and extracts integer values.
  */
-void FrameParser::parseResponse(const char *line) {
-    char *token;
-    char *rest_ptr = NULL;
+void FrameParser::parseResponse(const char* line) {
+    char* rest_ptr = nullptr;
     char copy_of_line[MAX_FRAME_SIZE] = {0};
+    std::strncpy(copy_of_line, line, MAX_FRAME_SIZE-1);
+    char* token = strtok_r(copy_of_line, ":", &rest_ptr);
+    token = strtok_r(nullptr, ",", &rest_ptr);
     this->values.clear();
-    std::strncpy(copy_of_line, line, MAX_FRAME_SIZE);
-    token = strtok_r(copy_of_line, ":", &rest_ptr);
-    token = strtok_r(NULL, ",", &rest_ptr);
-    while (token != NULL) {
+    while (token != nullptr) {
         this->values.push_back(std::stoi(token));
-        token = strtok_r(NULL, ",", &rest_ptr);
+        token = strtok_r(nullptr, ",", &rest_ptr);
     }
 }
 
@@ -77,12 +72,11 @@ void FrameParser::parseResponse(const char *line) {
 void FrameParser::parse(const char *frame) {
     // strtok will consume the buffer, using a copy for now
     // TODO: optimize once we don't need buffer elsewhere
-    char *token;
-    char *rest_ptr = NULL;
+    char* rest_ptr = nullptr;
     char copy_of_frame[MAX_FRAME_SIZE] = {0};
     std::strncpy(copy_of_frame, frame, MAX_FRAME_SIZE);
-    // use strtok_r since we have nested strtok calls
-    token = strtok_r(copy_of_frame, "\r\n", &rest_ptr);
+    // use strtok_r since we have nested calls
+    char* token = strtok_r(copy_of_frame, "\r\n", &rest_ptr);
     size_t idx = 0;
     // re-setting default values, i.e. \0 and WAIT_STATUS
     this->status = WAIT_STATUS;
@@ -90,8 +84,8 @@ void FrameParser::parse(const char *frame) {
     memset(this->response, 0, MAX_RESPONSE_SIZE);
     // parse lines for initial command,
     // response, and status
-    while (token != NULL) {
-        // command
+    while (token != nullptr) {
+        // get command
         if (idx==0) {
             strncpy(this->command, token, MAX_COMMAND_SIZE);
         }
@@ -105,8 +99,7 @@ void FrameParser::parse(const char *frame) {
                 this->response[0] = '\0';
             }
         }
-        // status which could occur on the second or third line depending
-        // on the response
+        // Get status, occurs on the 2nd or 3rd line depending on response
         if (idx > 0) {
             if (strstr(token, OK_TOKEN) != nullptr) {
                 this->status = OK_STATUS;
@@ -119,7 +112,7 @@ void FrameParser::parse(const char *frame) {
             }
         }
         // get next token
-        token = strtok_r(NULL, "\r\n", &rest_ptr);
+        token = strtok_r(nullptr, "\r\n", &rest_ptr);
         idx++;
     }
 }
@@ -134,17 +127,10 @@ Rockblock::Rockblock(AbstractExpander &expander, AbstractSerial &serial) {
 }
 
 /*
- * Defines when Rockblock is able to handle new messages
- */
-bool Rockblock::available() {
-    return this->enabled && !this->queued && !this->messageWaiting;
-}
-
-/*
  * Send command and wait for response or (timeout)
  */
 void Rockblock::sendCommand(const char *command) {
-    Serial.print("\n\nSend Command: "); Serial.println(command);
+    Serial.print("\nSend Command: "); Serial.println(command);
     if (!this->commandWaiting) {
         this->serial->print(command);
         this->commandWaiting = true;
@@ -157,28 +143,20 @@ void Rockblock::sendCommand(const char *command) {
  * Queue a message to send
  */
 void Rockblock::sendMessage(char *bfr, size_t len) {
-    Serial.println("Queuing message");
+    Serial.println("Queueing message");
+    memset(this->message, 0, MAX_MESSAGE_SIZE);
     snprintf(this->message, 340, "%s\r", bfr);
-    sendCommand(SBDWT_COMMAND);
-    // this->queued = true;
+    this->queued = true;
+    this->sendSuccess = false;
 };
 
 /*
- * Empty the queue: IMPLEMENT
+ * Turn Rockblock on before sending and turn it off before sleep
  */
-void Rockblock::emptyQueue() {
-    sendCommand(SBDD_COMMAND);
-};
-
 void Rockblock::toggle(bool on) {
-    this->enabled = false;
     this->expander->pinMode(13, EXPANDER_OUTPUT);
     this->expander->digitalWrite(13, !on);
-    // We issue a command to receive at least one OK before reading additional
-    // data. We are using a command that does not have any influence on the
-    // state other than setting enabled on. An OK response will toggle the
-    // Rocklock.
-    if (on) { sendCommand("AT\r\n"); }
+    this->on = on;
 }
 
 /*
@@ -196,97 +174,115 @@ void Rockblock::readAndAppendResponse() {
     strncat(this->stream, bfr, remainingSpace);
 }
 
-void Rockblock::parseSbdixResponse(const char* frame) {
-    int8_t pos = find(frame, 255, "+SBDIX: 0,");
-    if (pos > 0) {
-        Serial.print("DEBUG: Send success");
-        this->messageWaiting = false;
-    }
-}
-
-int8_t Rockblock::parseCsqResponse(const char* frame) {
-    int8_t pos = find(frame, 255, "+CSQ:");
-    if (pos > 0) {
-        return std::stoi(std::string(1, frame[pos + 5]));
-    }
-    return -1;
-}
-
 /*
  * We are using a state machine to parse the incoming serial data.
  * There are two levels of tokenizition: line breaks and two or three lines
  * forming a command response (frame).
  */
-void Rockblock::parseResponse() {
+void Rockblock::loop() {
 
+    // Assume WAIT_STATUS if no other status can be parsed
     RockblockStatus status = WAIT_STATUS;
     char frame[255] = {0};
 
+    // Rockblock is not able to respond in this state, no matter from which
+    // state we are coming; avoid communication errors.
+    if (this->on == 0) { this->state == OFFLINE; }
+
     // copy latest incoming serial data to this->stream
     this->readAndAppendResponse();
+    // extract a frame from this->stream
     extractFrame(frame, this->stream);
+    // parse the frame
     this->parser.parse(frame);
+
+    // clear command waiting if OK status
+    if (parser.status == OK_STATUS || parser.status == READY_STATUS) {
+        this->commandWaiting = false;
+    }
 
     // Some debug output
     if (frame[0] != 0) {
-        Serial.println();
         Serial.print("Last command: "); Serial.println(this->parser.command);
         Serial.print("Last response: "); Serial.println(this->parser.response);
         Serial.print("Status: ");
         Serial.println(statusLabels[this->parser.status]);
-        Serial.print("Values: ");
+        /* Serial.print("Values: ");
         for (size_t i = 0; i < this->parser.values.size(); i++) {
             Serial.print(this->parser.values[i]); Serial.print(", ");
         }
-        Serial.println();
+        Serial.println();*/
     }
 
-    // READY_STATUS means that the Rockblock is ready for text input. This can
-    // only be triggered by the SBDWT command. Print the text to Serial and
-    // schedule sending.
-    if (parser.status == READY_STATUS) {
-        Serial.println("DEBUG: Queueing message.");
-        // Send the message (not using the sendCommand method)
-        this->serial->print(this->message);
-        this->messageWaiting = true;
-        this->nextTry = this->internalTime;
-    }
+    // Update state
+    switch(this->state) {
 
-    // In WAIT_STATUS we did not receive a new frame from serial. We just wait
-    // and retry already triggered actions.
-    if (parser.status == WAIT_STATUS) {
-        if (
-            this->messageWaiting &&
-            this->nextTry < this->internalTime &&
-            !this->commandWaiting
-        ) {
-            sendCommand(CSQ_COMMAND);
-        }
-    }
+        case OFFLINE:
+            if (this->on) {
+                if (parser.status == WAIT_STATUS && !this->commandWaiting) {
+                    // Check whether Rockblock is available and clear MO and MT
+                    // buffers
+                    sendCommand(SBDD_COMMAND);
+                } else if (parser.status == OK_STATUS) {
+                    this->state = IDLE;
+                }
+            break;
 
-    if (parser.status == OK_STATUS) {
-        // Any ok status means that the device is enabled
-        this->enabled = true;
-        this->commandWaiting = false;
-        // Check for signal strength
-        if (
-            strstr(this->parser.command, "CSQ") != nullptr) {
+        case IDLE:
+            if (
+                parser.status == WAIT_STATUS && !this->commandWaiting &&
+                this->queued
+            ) {
+                sendCommand(SBDWT_COMMAND);
+                this->state = MESSAGE_WAITING;
+            };
+            break;
+
+        case MESSAGE_WAITING:
+            if (parser.status == READY_STATUS) {
+                Serial.println("Rockblock ready for text input: ");
+                this->serial->print(this->message);
+            } else if (parser.status == OK_STATUS) {
+                this->state = COM_CHECK;
+            }
+            break;
+
+        case COM_CHECK:
+            if (parser.status == WAIT_STATUS && !this->commandWaiting) {
+                sendCommand(CSQ_COMMAND);
+            } else if (
+                parser.status == OK_STATUS &&
+                strstr(this->parser.command, "CSQ") != nullptr
+            ) {
                 Serial.print("Signal strength: ");
                 Serial.println(this->parser.values[0]);
-            if (this->parser.values[0] > 2) {
-                Serial.println("Attempting to send message");
-                sendCommand(SBDIX_COMMAND);
-            } else {
-                Serial.println("Signal strength too low");
+                if (this->parser.values[0] > 2) {
+                    Serial.println("Send attempt.");
+                    this->state = SENDING;
+                } else {
+                    Serial.println("Signal strength too low to send.");
+                }
             }
+            break;
+
+        case SENDING:
+            if (parser.status == WAIT_STATUS && !this->commandWaiting) {
+                sendCommand(SBDIX_COMMAND);
+            } else if (
+                parser.status == OK_STATUS &&
+                strstr(this->parser.command, "SBDIX") != nullptr
+            ) {
+                if (this->parser.values[0] < 5) {
+                    Serial.println("Send success.");
+                    this->sendSuccess = true;
+                    this->queued = false;
+                    this->state = IDLE;
+                } else {
+                    Serial.println("Send failed.");
+                    this->state = COM_CHECK;
+                }
+            }
+            break;
         }
-        // Check for send success
-        parseSbdixResponse(frame);
     }
-
-}
-
-void Rockblock::loop(int64_t time) {
-    this->internalTime = time / 1E6;
-    this->parseResponse();
 }
