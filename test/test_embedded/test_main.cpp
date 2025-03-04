@@ -11,9 +11,13 @@ int runUnityTests() {
     // test rockblock
     RUN_TEST(testExtractFrame);
     RUN_TEST(testParseFrame);
+    RUN_TEST(testParseFrameWeirdFrame);
+    RUN_TEST(testParseEmptyFrame);
+    RUN_TEST(testFrameParserUncleanStart);
     RUN_TEST(testParseValues);
     RUN_TEST(testPayloadParsing);
     RUN_TEST(testPayloadParsingMultipleLines);
+    RUN_TEST(testPayloadParsingMultipleEmpty);
     return UNITY_END();
 }
 

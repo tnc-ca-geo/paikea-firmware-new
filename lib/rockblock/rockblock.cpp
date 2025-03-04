@@ -6,7 +6,7 @@
 #define OK_TOKEN "OK"
 #define ERROR_TOKEN "ERROR"
 #define READY_TOKEN "READY"
-#define SEND_THRESHOLD 2
+#define SEND_THRESHOLD 1
 #define LINE_SEP "\r\n"
 
 // This unfortunately requires the Arduino String class to be printable.
@@ -34,11 +34,30 @@ const char* SBDD_COMMAND = "SBDD2";
 const char* SBDRT_COMMAND = "SBDRT";
 
 /*
+ * Strsep for multiple character delimiters.
+ */
+char* strsep_multi(char** stringp, const char* delim) {
+    if (*stringp == NULL) { return NULL; }
+    char* start = *stringp;
+    char* end = strstr(start, delim);
+    if (end) {
+        *end = '\0';
+        *stringp = end + strlen(delim);
+    } else {
+        *stringp = NULL;
+    }
+    return start;
+}
+
+/*
  * Extract a frame by token and remove it from the incoming serialBuffer.
- * bfr[0] will be 0 if no frame extracted.
+ * bfr[0] will be 0 if no frame extracted. TODO: We could make this slightly
+ * more sophisticated in a way that we could not send messages that break the
+ * frame parser. E.g. if the message itself contains characters that are
+ * status tokens. Leave that for later.
  */
 void extractFrame(char* bfr, char* serialBuffer) {
-    const char *stringConstants[] = {OK_TOKEN, ERROR_TOKEN, READY_TOKEN};
+    const char* stringConstants[] = {OK_TOKEN, ERROR_TOKEN, READY_TOKEN};
     const char* pos = nullptr;
     size_t len = 0;
     size_t idx = 0;
@@ -73,34 +92,33 @@ void FrameParser::parseResponse(const char* line) {
 
 /*
  * Parse a Rockblock Serial frame. strtok does unfortunately not work with
- * empty tokens, however text can contain two LINE_SEP in a row with nothing
- * inbetween.
+ * empty tokens.
  */
-void FrameParser::parse(const char *frame) {
-    // strtok will consume the buffer, using a copy for now
-    // TODO: optimize once we don't need buffer elsewhere
-    char* rest_ptr = nullptr;
-    char copy_of_frame[MAX_FRAME_SIZE] = {0};
+void FrameParser::parse(const char* frame) {
+    const uint8_t sep_len = strlen(LINE_SEP);
+    // strsep_multi will consume the buffer, use a copy to allow for const
+    char* rest = strdup(frame);
+    char* token = nullptr;
     // payload can stretch multiple lines
-    size_t payload_idx = 0;
-    std::strncpy(copy_of_frame, frame, MAX_FRAME_SIZE);
-    // use strtok_r since we have nested calls
-    char* token = strtok_r(copy_of_frame, LINE_SEP, &rest_ptr);
+    size_t pld_idx = 0;
+    // identify on what line we are on
     size_t idx = 0;
-    // re-setting default values, i.e. \0 and WAIT_STATUS
-    this->status = WAIT_STATUS;
+    // re-setting default values
     memset(this->command, 0, MAX_COMMAND_SIZE);
     memset(this->response, 0, MAX_RESPONSE_SIZE);
     memset(this->payload, 0, MAX_MESSAGE_SIZE);
-    // Parse lines for initial command, response, and status.
-    // we have to be aware of the fact that the payload can stretch multiple
-    // lines. But will always follow the command line.
-    while (token != nullptr) {
-        // get command
+    // we need this local vars since they might change during the parse process
+    // assign final values at the end
+    char pld[MAX_MESSAGE_SIZE] = {0};
+    this->status = WAIT_STATUS;
+    // iterate over tokens
+    while ( (token = strsep_multi(&rest, LINE_SEP)) != NULL ) {
+
+        // get command. Command will be always the first valid line.
         if (idx==0) {
             strncpy(this->command, token, MAX_COMMAND_SIZE);
         }
-        // parse response if available
+        // parse response. Response will be always the second valid line.
         if (idx==1) {
             if  (token[0] == '+') {
                 memset(this->response, 0, MAX_RESPONSE_SIZE);
@@ -110,35 +128,39 @@ void FrameParser::parse(const char *frame) {
                 this->response[0] = '\0';
             }
         }
-        // Get status, occurs on last line, on the second at the earliest
+
+        // Parse status, occurs the last line but on the second at the earliest
         if (idx > 0) {
             if (strstr(token, OK_TOKEN) != nullptr) {
                 this->status = OK_STATUS;
-                break;
+                continue;
             } else if (strstr(token, ERROR_TOKEN) != nullptr) {
                 this->status = ERROR_STATUS;
-                break;
+                continue;
             } else if (strstr(token, READY_TOKEN) != nullptr) {
                 this->status = READY_STATUS;
-                break;
+                continue;
             }
         }
-        // Get payload, i.e. incoming messages
-        if (idx > 1) {
-            // There are already characters in the payload buffer meaning
-            // the tokenization acted on the message itself. Putting the token
-            // back in.
-            if (payload_idx > 0) {
-                strncpy(this->payload + payload_idx, LINE_SEP, sizeof(LINE_SEP));
-                payload_idx += sizeof(LINE_SEP) - 1;
+
+        // Parse payload:
+        // - Will always (!) start (!) on third valid line
+        // - Will not start with /r/n
+        // - After that it should be tolerant to any content
+        if ( (idx == 2 && token[0] != '\0') || (idx > 2 && pld_idx > 0) ) {
+            if (pld_idx > 0) {
+                strncpy(pld + pld_idx, LINE_SEP, sep_len);
+                pld_idx += sep_len;
             }
-            strncpy(this->payload + payload_idx, token, MAX_RESPONSE_SIZE);
-            payload_idx += sizeof(token) + 1;
+            strncpy(pld + pld_idx, token, MAX_MESSAGE_SIZE - pld_idx);
+            pld_idx += strlen(token);
         }
-        // get next token
-        token = strtok_r(nullptr, LINE_SEP, &rest_ptr);
-        idx++;
+
+        // skip empty lines, increase index unless token is empty
+        if (token[0] != 0) { idx++; }
     }
+    // Our current parse method will generate trailing SEP
+    if (pld_idx > sep_len) { strncpy(this->payload, pld, pld_idx-sep_len); }
 }
 
 /*
@@ -153,10 +175,11 @@ Rockblock::Rockblock(AbstractExpander &expander, AbstractSerial &serial) {
 /*
  * Send command and wait for response or (timeout)
  */
-void Rockblock::sendCommand(const char *command) {
+void Rockblock::sendCommand(const char* command) {
     char commandBfr[10] = {0};
     snprintf(commandBfr, 10, "AT+%s\r\n", command);
-    Serial.print("\nSend Command: "); Serial.println(commandBfr);
+    // Serial.print("\nSend Command: "); Serial.println(commandBfr);
+    // for characteristics
     if (!this->commandWaiting) {
         this->commandWaiting = true;
         this->serial->print(commandBfr);
@@ -168,10 +191,13 @@ void Rockblock::sendCommand(const char *command) {
 /*
  * Queue a message to send
  */
-void Rockblock::sendMessage(char *bfr, size_t len) {
-    Serial.println("Queueing message");
+void Rockblock::sendMessage(char* bfr, size_t len) {
+    Serial.println("Queueing message and deleting incoming");
     memset(this->message, 0, MAX_MESSAGE_SIZE);
+    memset(this->incoming, 0, MAX_MESSAGE_SIZE);
     snprintf(this->message, 340, "%s\r", bfr);
+    start_time = esp_timer_get_time() / 1E6;
+    retries = 0;
     this->queued = true;
     this->sendSuccess = false;
 };
@@ -237,9 +263,9 @@ void Rockblock::loop() {
 
     // Some debug output
     if (frame[0] != 0) {
-        Serial.println("FRAME");
-        Serial.println(frame);
-        Serial.print("Last command: "); Serial.println(this->parser.command);
+        // Serial.println("FRAME");
+        // Serial.println(frame);
+        Serial.print("\nLast command: "); Serial.println(this->parser.command);
         Serial.print("Last response: "); Serial.println(this->parser.response);
         Serial.print("Status: ");
         Serial.println(statusLabels[this->parser.status]);
@@ -292,18 +318,23 @@ void Rockblock::loop() {
                 strstr(this->parser.command, CSQ_COMMAND) != nullptr
             ) {
                 Serial.print("Signal strength: ");
-                Serial.println(this->parser.values[0]);
+                Serial.print(this->parser.values[0]);
                 if (this->parser.values[0] > SEND_THRESHOLD) {
-                    Serial.println("Attempt sending.");
+                    // store actual send threshold
+                    this->success = this->parser.values[0];
+                    Serial.println(" -> attempt sending");
                     this->state = SENDING;
                 } else {
-                    Serial.println("Signal strength too low to send.");
+                    Serial.println(" -> too low to send");
                 }
             }
             break;
 
         case SENDING:
-            if (ready_for_command) { sendCommand(SBDIX_COMMAND); }
+            if (ready_for_command) {
+                sendCommand(SBDIX_COMMAND);
+                this->retries += 1;
+            }
             else if (
                 parser.status == OK_STATUS &&
                 strstr(this->parser.command, SBDIX_COMMAND) != nullptr
@@ -312,6 +343,11 @@ void Rockblock::loop() {
                     Serial.println("Send success.");
                     this->sendSuccess = true;
                     this->queued = false;
+                    Serial.print("Time in seconds ");
+                    Serial.println(esp_timer_get_time()/1E6 - this->start_time);
+                    Serial.print("Retries "); Serial.println(this->retries);
+                    Serial.print("Trigger signal strength ");
+                    Serial.println(this->success);
                     // check for new incoming message
                     if (this->parser.values[2] == 1) {
                         this->state = INCOMING;
@@ -331,6 +367,7 @@ void Rockblock::loop() {
                 parser.status == OK_STATUS &&
                 strstr(this->parser.command, SBDRT_COMMAND) != nullptr
             ) {
+                strncpy(this->incoming, parser.payload, MAX_MESSAGE_SIZE);
                 this->state = IDLE;
             }
             break;

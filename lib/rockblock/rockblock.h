@@ -48,7 +48,10 @@ class Rockblock {
         FrameParser parser = FrameParser();
         char message[MAX_MESSAGE_SIZE] = {0};
         char incoming[MAX_MESSAGE_SIZE] = {0};
-        // buffer of unhandled serial data
+        // buffer for unhandled serial data
+        time_t start_time;
+        uint8_t retries = 0;
+        uint8_t success = 0;
         char stream[1024] = {0};
         bool on = false;
         bool queued = false;
