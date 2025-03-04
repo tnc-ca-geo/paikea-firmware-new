@@ -8,7 +8,7 @@
 typedef struct {
     time_t start_time = 0;
     time_t gps_read_time = 0;
-    uint32_t time_out = 300;
+    const uint32_t time_out = 300;
     uint32_t prior_uptime = 0;
     uint32_t frequency = 120;
     bool go_to_sleep = 0;

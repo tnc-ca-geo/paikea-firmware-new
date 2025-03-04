@@ -5,7 +5,7 @@
 #include <tca95xx.h>
 #include <gps.h>
 #include <display.h>
-#include <loraRockblock.h>
+#include <rockblock.h>
 #include <stateType.h>
 #include <scoutMessages.h>
 #include <storage.h>
@@ -31,7 +31,8 @@ static TaskHandle_t rockblockTaskHandle = NULL;
 
 // Initialize Hardware
 HardwareSerial gps_serial(1);
-HardwareSerial rockblock_serial(2);
+// Defined in hal.h
+RockblockSerial rockblock_serial = RockblockSerial();
 // Port Expander using i2c
 Expander expander = Expander(Wire);
 // GPS using UART
@@ -39,7 +40,7 @@ Gps gps = Gps(expander, gps_serial);
 // Display using i2c, for development only.
 LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
-LoraRockblock rockblock = LoraRockblock(expander, rockblock_serial);
+Rockblock rockblock = Rockblock(expander, rockblock_serial);
 // State object
 systemState state;
 // Storage
@@ -152,18 +153,18 @@ void Task_rockblock(void *pvParameters) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
-  if (rtc_first_run) {
+  /* if (rtc_first_run) {
     Serial.println("Configure LoraWAN");
-    rockblock.configure();
+    rockblock.t();
     // Re-joining every single time for now. More complex joining procedures
     // should be implemented when we really use LoRaWAN, see e.g.
     // https://www.thethingsnetwork.org/forum/t/
     // how-to-handle-an-automatic-re-join-process/34183/16
     rockblock.beginJoin();
-  }
+  }*/
   for (;;) {
     rockblock.loop();
-    vTaskDelay( pdMS_TO_TICKS( 500 ) );
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -206,7 +207,7 @@ void Task_gps(void *pvParameters) {
  */
 void Task_message(void *pvParameters) {
   for (;;) {
-    if ( rockblock.available() ) {
+    if ( rockblock.state == IDLE ) {
       rockblock.sendMessage((char*) "Hello world!\0");
     }
     vTaskDelay( pdMS_TO_TICKS( 10000 ) );
@@ -262,6 +263,7 @@ void goToSleep() {
  * TODO: Implement timeouts and retries
  */
 void Task_schedule(void *pvParameters) {
+  char bfr[64] = {0};
   char message[255] = {0};
   for (;;) {
 
@@ -274,9 +276,9 @@ void Task_schedule(void *pvParameters) {
       state.message_sent = true;
     }
 
-    // Wait for success and shut done Rockblock
-    if ( state.message_sent && rockblock.getSendSuccess() ) {
-      rockblock.getLastMessage(message);
+    // Wait for success and shut down Rockblock
+    if ( state.message_sent && rockblock.sendSuccess ) {
+      rockblock.getLastIncoming(message);
       Serial.print("Message: "); Serial.println(message);
       state.rockblock_done = true;
       state.go_to_sleep = true;
@@ -285,9 +287,10 @@ void Task_schedule(void *pvParameters) {
     // Shut down when we are timing out, set shorter wakeup time before
     // going to sleep
     if (esp_timer_get_time()/1E6 > state.time_out ) {
-      Serial.print("System time out, retry in ");
-      Serial.print(RETRY_TIME);
-      Serial.println(" seconds.");
+      snprintf(
+        bfr, 64, "System timed out after %d, retry in %d seconds.",
+        state.time_out, RETRY_TIME);
+      Serial.println(bfr);
       state.frequency = RETRY_TIME;
       state.go_to_sleep = true;
     }
@@ -323,8 +326,8 @@ void setup() {
   // Output some useful message
   Serial.println("\nScout buoy firmware v2.0.0-beta");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
-  Serial.println("©The Nature Conservancy 2024");
   Serial.println("falk.schuetznemeister@tnc.org\n");
+  Serial.println("© The Nature Conservancy 2024");
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
   Serial.print("Battery: "); Serial.println(state.bat);
