@@ -23,7 +23,7 @@ typedef struct {
     float heading=0;
     float speed=0; // speed in knots
     float bat=0;
-    int32_t rssi;
+    uint8_t signal = 0;
     char message[255] = {0};
 } systemState;
 

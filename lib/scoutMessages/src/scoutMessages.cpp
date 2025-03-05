@@ -41,28 +41,21 @@ size_t ScoutMessages::createPK001(char* bfr, systemState &state) {
 }
 
 /*
- * Parse an incoming PK006 message. The data format is rather inconsistent,
+ * Parse an incoming message. The data format is rather inconsistent,
  * but we are taking it from the legacy version of the firmware by Matt Arcady.
  * Example: +DATA:PK006,60
  */
-bool ScoutMessages::parsePK006(systemState &state, char* bfr) {
+bool ScoutMessages::parseIncoming(systemState &state, char* bfr) {
     char token[] = "+DATA:PK006,";
     char* substr = strstr(bfr, token);
     int32_t parsed = 0;
     if (substr == NULL) return false;
     if (substr != bfr) return false;
-    try {
-        parsed = std::stoi(bfr+12, nullptr, 10);
-    }
+    try { parsed = std::stoi(bfr+12, nullptr, 10); }
     catch (...) { return false; }
-    if (parsed < 0) {
-        return false;
-    } else if (parsed < 5) {
-        state.frequency = 5;
-    } else if (parsed > 1440 ) {
-        state.frequency = 1440;
-    } else {
-        state.frequency = parsed;
-    }
+    if (parsed < 0) { return false;  }
+    else if (parsed < 2) { state.frequency = 2 * 60; }
+    else if (parsed > 1440 ) { state.frequency = 1440 * 60; }
+    else { state.frequency = parsed  * 60; }
     return true;
 }

@@ -69,6 +69,9 @@ void setTime(time_t time) {
   if (!state.start_time) { state.start_time = time - old_time; }
 }
 
+/*
+ * Determine wake up time, pegging it to a time raster starting at 0:00
+ */
 time_t getNextWakeupTime(time_t now, uint16_t delay) {
   time_t full_hour = int(now/3600) * 3600;
   uint16_t cycles = int(now % 3600/delay);
@@ -101,7 +104,8 @@ void Task_blink(void *pvParamaters) {
   for(;;) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
       expander.digitalWrite( LED01, blink_state || state.gps_done );
-      expander.digitalWrite( LED00, state.rockblock_done );
+      expander.digitalWrite(
+        LED00, state.gps_done && (blink_state || state.rockblock_done ));
       xSemaphoreGive(mutex_i2c);
     }
     blink_state = !blink_state;
@@ -132,7 +136,7 @@ void Task_display(void *pvParameters) {
       time = getTime();
       strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
       snprintf(
-        out_string, 50, "%s\nrssi %5d\n%s", time_string, state.rssi,
+        out_string, 50, "%s\nsignal %3d\n%s", time_string, state.signal,
         message_string);
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         display.set(out_string);
@@ -164,6 +168,7 @@ void Task_rockblock(void *pvParameters) {
   }*/
   for (;;) {
     rockblock.loop();
+    state.signal = rockblock.getSignalStrength();
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
@@ -177,6 +182,7 @@ void Task_gps(void *pvParameters) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
+  Serial.println("\nWaiting for GPS fix.");
   for(;;) {
     gps.loop();
     if (gps.updated) {
@@ -198,19 +204,6 @@ void Task_gps(void *pvParameters) {
       vTaskDelete( gpsTaskHandle );
     }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
-  }
-}
-
-/*
- * DEBUG Task - regularly send messages (for radio testing only).
- * TODO: remove or use DEBUG flag
- */
-void Task_message(void *pvParameters) {
-  for (;;) {
-    if ( rockblock.state == IDLE ) {
-      rockblock.sendMessage((char*) "Hello world!\0");
-    }
-    vTaskDelay( pdMS_TO_TICKS( 10000 ) );
   }
 }
 
@@ -279,7 +272,13 @@ void Task_schedule(void *pvParameters) {
     // Wait for success and shut down Rockblock
     if ( state.message_sent && rockblock.sendSuccess ) {
       rockblock.getLastIncoming(message);
-      Serial.print("Message: "); Serial.println(message);
+      if (message[0] != '\0') {
+        Serial.print("Incoming message: "); Serial.println(message);
+        if ( messages.parseIncoming(state, message) ) {
+          Serial.print("NEW REPORTING TIME: ");
+          Serial.println(state.frequency);
+        }
+      }
       state.rockblock_done = true;
       state.go_to_sleep = true;
     }
@@ -326,8 +325,8 @@ void setup() {
   // Output some useful message
   Serial.println("\nScout buoy firmware v2.0.0-beta");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
-  Serial.println("falk.schuetznemeister@tnc.org\n");
-  Serial.println("© The Nature Conservancy 2024");
+  Serial.println("falk.schuetzenmeister@tnc.org");
+  Serial.println("\n© The Nature Conservancy 2024\n");
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
   Serial.print("Battery: "); Serial.println(state.bat);
@@ -364,7 +363,7 @@ void setup() {
   xTaskCreate(&Task_rockblock, "Task rockblock", 4096, NULL, 10,
     &rockblockTaskHandle);
 #if DEBUG
-  xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
+  /* xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL); */
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
 #endif
 }

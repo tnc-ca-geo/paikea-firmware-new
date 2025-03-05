@@ -2,13 +2,6 @@
 #include <cstring>
 #include <vector>
 
-#define MAX_FRAME_SIZE 255
-#define OK_TOKEN "OK"
-#define ERROR_TOKEN "ERROR"
-#define READY_TOKEN "READY"
-#define SEND_THRESHOLD 1
-#define LINE_SEP "\r\n"
-
 // This unfortunately requires the Arduino String class to be printable.
 std::map<RockblockStatus, String> statusLabels = {
     {WAIT_STATUS, "WAIT"}, {OK_STATUS, "OK"}, {READY_STATUS, "READY"},
@@ -205,7 +198,16 @@ void Rockblock::sendMessage(char* bfr, size_t len) {
 /*
  * Get the incoming message. Will be only available untile new message is sent.
  */
-void Rockblock::getLastIncoming(char *bfr, size_t len) {};
+void Rockblock::getLastIncoming(char *bfr, size_t len) {
+    strncpy(bfr, this->incoming, MAX_MESSAGE_SIZE-1);
+};
+
+/*
+ * Make signal strength readable
+ */
+uint8_t Rockblock::getSignalStrength() {
+    return this->signal;
+}
 
 /*
  * Turn Rockblock on before sending and turn it off before sleep
@@ -319,6 +321,7 @@ void Rockblock::loop() {
             ) {
                 Serial.print("Signal strength: ");
                 Serial.print(this->parser.values[0]);
+                this->signal = this->parser.values[0];
                 if (this->parser.values[0] > SEND_THRESHOLD) {
                     // store actual send threshold
                     this->success = this->parser.values[0];
