@@ -1,4 +1,10 @@
-// libraries
+/*
+ * Firmware for Scout buoy device. This is a very stripped down, much simpler
+ * version than the original one.
+ *
+ * falk.schuetzenmeister@tnc.org
+ */
+
 #include <Arduino.h>
 #include <Wire.h>
 // my libraries
@@ -22,12 +28,13 @@ static SemaphoreHandle_t mutex_i2c;
 // Use to protect state object if not atomic, ideally we would modify state
 // object only in one place
 static SemaphoreHandle_t mutex_state;
-// create TaskhHandles, reduce number of tasks to one for each peripherial and
+// Create TaskhHandles, reduce number of tasks to one for each peripherial and
 // one for the main state object
 // static TaskHandle_t blinkTaskHandle = NULL;
 static TaskHandle_t displayTaskHandle = NULL;
 static TaskHandle_t gpsTaskHandle = NULL;
 static TaskHandle_t rockblockTaskHandle = NULL;
+static TaskHandle_t timeoutTaskHandle = NULL;
 
 // Initialize Hardware
 HardwareSerial gps_serial(1);
@@ -63,20 +70,42 @@ time_t getTime() {
  */
 void setTime(time_t time) {
   struct timeval new_time;
-  time_t old_time = getTime();
+  // time_t old_time = getTime();
   new_time.tv_sec = time;
   settimeofday(&new_time, NULL);
-  if (!state.start_time) { state.start_time = time - old_time; }
+  // if (!state.start_time) { state.start_time = time - old_time; }
 }
 
 /*
- * Determine wake up time, pegging it to a time raster starting at 0:00
+ * Determine wake up time, pegging it to a time raster starting at the full hour
  */
 time_t getNextWakeupTime(time_t now, uint16_t delay) {
   time_t full_hour = int(now/3600) * 3600;
   uint16_t cycles = int(now % 3600/delay);
   return full_hour + (cycles + 1) * delay;
 }
+
+/*
+ * Get sleep difference from state
+ */
+uint32_t getSleepDifference(systemState state) {
+  time_t now = getTime();
+  time_t wakeUp = getNextWakeupTime(now, state.frequency);
+  uint32_t difference = wakeUp - now;
+  difference = state.send_success ? difference : RETRY_TIME;
+  Serial.print("start: " ); Serial.println(state.start_time);
+  Serial.print("frequency: "); Serial.println(state.frequency);
+  Serial.print("now: "); Serial.println( getTime() );
+  Serial.print("wakeup time: "); Serial.println(wakeUp);
+  Serial.print("difference: "); Serial.println(difference);
+  // Serial.print("retries: "); Serial.println(state.retries - 1);
+  Serial.println();
+  // set minimum sleep time, to ensure we wake up
+  difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
+  difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP : difference;
+  return difference;
+}
+
 
 /*
  * Read the battery voltage (on start-up, no reason to get fancy here)
@@ -87,6 +116,27 @@ float readBatteryVoltage() {
     readings += (float) analogReadMilliVolts(BATT_ADC)/10000;
   }
   return readings * (BATT_R_UPPER + BATT_R_LOWER)/BATT_R_LOWER;
+}
+
+/*
+ * Go to sleep
+ */
+void goToSleep() {
+  char bfr[64] = {0};
+  storage.store( state );
+  uint32_t difference = getSleepDifference(state);
+  snprintf(bfr, 64,
+    "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n",
+    (uint32_t) state.frequency, difference);
+  Serial.print(bfr);
+  // Turn off peripherals, give some extra time
+  if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
+    display.off();
+    expander.init();
+    xSemaphoreGive(mutex_i2c);
+  }
+  esp_sleep_enable_timer_wakeup( difference * 1E6 );
+  esp_deep_sleep_start();
 }
 
 /*
@@ -122,34 +172,23 @@ void Task_display(void *pvParameters) {
   char out_string[44] = {0};
   char time_string[22] = {0};
   time_t time = 0;
-  state.display_off = false;
   for(;;) {
-    if ( state.go_to_sleep ) {
-      Serial.println("Turn display off.");
-      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-        display.off();
-        xSemaphoreGive(mutex_i2c);
-        state.display_off = true;
-        vTaskDelete( displayTaskHandle );
-      }
-    } else {
-      time = getTime();
-      strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
-      snprintf(
-        out_string, 50, "%s\nsignal %3d\n%s", time_string, state.signal,
-        message_string);
-      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-        display.set(out_string);
-        xSemaphoreGive(mutex_i2c);
-      }
-    }vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    time = getTime();
+    strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
+    snprintf(
+      out_string, 50, "%s\nsignal %3d\n%s", time_string, state.signal,
+      message_string);
+    if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+      display.set(out_string);
+      xSemaphoreGive(mutex_i2c);
+    }
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
+
 }
 
 /*
- * Running the radio. For now we are using a LoraWAN radio as stand-in for
- * Rockblock.
+ * Running the radio.
  */
 void Task_rockblock(void *pvParameters) {
   Serial.println("Start radio loop");
@@ -157,24 +196,16 @@ void Task_rockblock(void *pvParameters) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
-  /* if (rtc_first_run) {
-    Serial.println("Configure LoraWAN");
-    rockblock.t();
-    // Re-joining every single time for now. More complex joining procedures
-    // should be implemented when we really use LoRaWAN, see e.g.
-    // https://www.thethingsnetwork.org/forum/t/
-    // how-to-handle-an-automatic-re-join-process/34183/16
-    rockblock.beginJoin();
-  }*/
   for (;;) {
     rockblock.loop();
     state.signal = rockblock.getSignalStrength();
-    vTaskDelay( pdMS_TO_TICKS( 100 ) );
+    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
 
 /*
  * Run GPS. Disable GPS and remove task when we got a fix.
+ * TODO: There is a lot of copying values going on.
  */
 void Task_gps(void *pvParameters) {
   char bfr[32] = {};
@@ -182,22 +213,30 @@ void Task_gps(void *pvParameters) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
+  time_t gps_start = esp_timer_get_time() / 1E6;
   Serial.println("\nWaiting for GPS fix.");
   for(;;) {
     gps.loop();
     if (gps.updated) {
       sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
-      state.lat = gps.lat;
-      state.lng = gps.lng;
-      state.heading = gps.heading;
-      state.speed = gps.speed;
-      state.gps_done = true;
-      state.gps_read_time = gps.get_corrected_epoch();
       if (xSemaphoreTake(mutex_state, 200)) {
+        state.lat = gps.lat;
+        state.lng = gps.lng;
+        state.heading = gps.heading;
+        state.speed = gps.speed;
+        state.gps_done = true;
+        state.gps_read_time = gps.get_corrected_epoch();
+        time_t old_time = getTime();
         setTime( state.gps_read_time );
+        // set real system start time retroactively
+        if (state.start_time == 0) {
+          state.start_time = state.gps_read_time - old_time;
+        }
         xSemaphoreGive(mutex_state);
       }
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+        Serial.print("GPS time: ");
+        Serial.println( esp_timer_get_time() / 1E6 - gps_start );
         gps.disable();
         xSemaphoreGive(mutex_i2c);
       }
@@ -223,46 +262,20 @@ void Task_time(void *pvParameters) {
   }
 }
 
-
-/*
- * Go to sleep when there is nothing left to wait for
- */
-void goToSleep() {
-  char bfr[255] = {0};
-  storage.store( state );
-  uint32_t difference = getNextWakeupTime(
-    getTime(), state.frequency ) - getTime();
-  // set minimum sleep time, just to ensure we are resetting here
-  if ( difference < MINIMUM_SLEEP ) { difference = MINIMUM_SLEEP; }
-  // set maximim sleep time, so that we don't loose the device
-  if ( difference > MAXIMUM_SLEEP ) { difference = MAXIMUM_SLEEP; }
-  snprintf(
-    bfr, 255, "Going to sleep - reporting interval: %ds, difference: %ds\n",
-    (uint32_t) state.frequency, difference);
-  Serial.print(bfr);
-  // Turn off peripherals
-  // Allow for a little bit of wait to make sure expander is actually off.
-  if (xSemaphoreTake(mutex_i2c, 1000) == pdTRUE) {
-    expander.init();
-    xSemaphoreGive(mutex_i2c);
-  }
-  esp_sleep_enable_timer_wakeup( difference * 1E6 );
-  esp_deep_sleep_start();
-}
-
 /*
  * Task - Manage timing and logic of all components
- * TODO: Implement more abstract state machine here?
+ * TODO: Implement more abstract state machine?
  * TODO: Implement timeouts and retries
  */
-void Task_schedule(void *pvParameters) {
-  char bfr[64] = {0};
+void Task_main_loop(void *pvParameters) {
+
   char message[255] = {0};
   for (;;) {
 
-    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
-
-    // Wait until we get a fix and send message
+    /*
+     * Wait until we get a fix and send message
+     * TODO: add GPS timeout?
+     */
     if ( gps.updated && !state.message_sent ) {
       messages.createPK001(message, state);
       rockblock.sendMessage(message);
@@ -271,32 +284,38 @@ void Task_schedule(void *pvParameters) {
 
     // Wait for success and shut down Rockblock
     if ( state.message_sent && rockblock.sendSuccess ) {
+      state.send_success = true;
       rockblock.getLastIncoming(message);
       if (message[0] != '\0') {
         Serial.print("Incoming message: "); Serial.println(message);
         if ( messages.parseIncoming(state, message) ) {
-          Serial.print("NEW REPORTING TIME: ");
+          Serial.print("New reporting time: ");
           Serial.println(state.frequency);
         }
       }
+      // TODO: this is only used for blink state and can probably be removed
       state.rockblock_done = true;
-      state.go_to_sleep = true;
+      goToSleep();
     }
 
-    // Shut down when we are timing out, set shorter wakeup time before
-    // going to sleep
-    if (esp_timer_get_time()/1E6 > state.time_out ) {
+    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+  }
+}
+
+/*
+ * Timeout when not successful, consider this a gentle watchdog
+ */
+void Task_timeout(void *pvParameters) {
+  char bfr[64] = {0};
+  for (;;) {
+    if ( esp_timer_get_time()/1E6 > TIME_OUT ) {
       snprintf(
         bfr, 64, "System timed out after %d, retry in %d seconds.",
-        state.time_out, RETRY_TIME);
+        TIME_OUT, RETRY_TIME);
       Serial.println(bfr);
-      state.frequency = RETRY_TIME;
-      state.go_to_sleep = true;
+      goToSleep();
     }
-
-    // Go to sleep
-    if ( state.display_off && state.go_to_sleep ) { goToSleep(); }
-
+    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
 
@@ -309,6 +328,10 @@ void setup() {
     ROCKBLOCK_SERIAL_RX_PIN, ROCKBLOCK_SERIAL_TX_PIN);
   // ---- Start I2C bus for peripherials ----------
   Wire.begin();
+  // ---- set state defaults
+  // Reporting times need to be changed via downlink message and will only be
+  // persisted until next power off
+  state.frequency = DEFAULT_SLEEP_TIME;
   // ---- Restore state
   storage.restore(state);
   // ----- Init Display
@@ -323,13 +346,15 @@ void setup() {
   expander.pinMode(10, EXPANDER_OUTPUT);
   expander.pinMode(7, EXPANDER_OUTPUT);
   // Output some useful message
-  Serial.println("\nScout buoy firmware v2.0.0-beta");
+  Serial.println("\nScout buoy firmware v2.0.0-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2024\n");
+  Serial.print("reporting time: "); Serial.println(state.frequency);
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
-  Serial.print("Battery: "); Serial.println(state.bat);
+  Serial.print("battery: "); Serial.println(state.bat);
+  Serial.println();
   // ---- Give some time to stabilize -------------
   vTaskDelay( pdTICKS_TO_MS(100) );
 
@@ -359,9 +384,11 @@ void setup() {
    */
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, NULL);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
-  xTaskCreate(&Task_schedule, "Task schedule", 4096, NULL, 10, NULL);
   xTaskCreate(&Task_rockblock, "Task rockblock", 4096, NULL, 10,
     &rockblockTaskHandle);
+  xTaskCreate(&Task_main_loop, "Task main loop", 4096, NULL, 10, NULL);
+  xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10,
+    &timeoutTaskHandle);
 #if DEBUG
   /* xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL); */
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);

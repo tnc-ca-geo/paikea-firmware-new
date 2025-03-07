@@ -6,11 +6,7 @@
  * Constructor passing a TwoWire instance.
  */
 Expander::Expander(TwoWire& i2c) {
-    Serial.println("Initializing Expander");
-    Serial.println("---------------------");
-    Serial.println("---------------------");
-    Serial.println("---------------------");
-    wire = &i2c;
+    this->wire = &i2c;
 }
 
 /*
@@ -18,8 +14,8 @@ Expander::Expander(TwoWire& i2c) {
  */
 void Expander::begin(uint8_t i2c_address) {
     this->address = i2c_address;
-    Serial.print("ADDRESS ");
-    Serial.println(i2c_address);
+    // Serial.print("ADDRESS ");
+    //Serial.println(i2c_address);
     this->init();
 }
 

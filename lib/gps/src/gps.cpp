@@ -78,7 +78,6 @@ void Gps::readln(char *buffer) {
     }
 }
 
-
 // assuming that 1 second precision is enough for our purposes
 time_t Gps::time_to_epoch(TinyGPSDate date, TinyGPSTime time) {
     struct tm t={0};
