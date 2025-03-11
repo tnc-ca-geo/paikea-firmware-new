@@ -238,7 +238,7 @@ void Rockblock::readAndAppendResponse() {
  * There are two levels of tokenizition: line breaks and two or three lines
  * forming a command response (frame).
  */
-void Rockblock::loop() {
+void Rockblock::run() {
 
     // Assume WAIT_STATUS if no other status can be parsed
     RockblockStatus status = WAIT_STATUS;
@@ -282,6 +282,7 @@ void Rockblock::loop() {
     // workflow
     bool ready_for_command = (
         parser.status == WAIT_STATUS && !this->commandWaiting);
+
     // Update state
     switch(this->state) {
 
@@ -343,8 +344,6 @@ void Rockblock::loop() {
                 strstr(this->parser.command, SBDIX_COMMAND) != nullptr
             ) {
                 if (this->parser.values[0] < 5) {
-                    Serial.println("Send success.");
-                    this->sendSuccess = true;
                     this->queued = false;
                     Serial.print("Time in seconds ");
                     Serial.println(esp_timer_get_time()/1E6 - this->start_time);
@@ -353,9 +352,11 @@ void Rockblock::loop() {
                     Serial.println(this->success);
                     // check for new incoming message
                     if (this->parser.values[2] == 1) {
+                        Serial.println("Incoming message");
                         this->state = INCOMING;
                     } else {
                         this->state = IDLE;
+                        this->sendSuccess = true;
                     }
                 } else {
                     Serial.println("Send failed.");
@@ -372,7 +373,15 @@ void Rockblock::loop() {
             ) {
                 strncpy(this->incoming, parser.payload, MAX_MESSAGE_SIZE);
                 this->state = IDLE;
+                this->sendSuccess = true;
             }
             break;
+    }
+}
+
+
+void Rockblock::loop() {
+    if (this->on) {
+        this->run();
     }
 }

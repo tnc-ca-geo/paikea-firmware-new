@@ -11,6 +11,7 @@
 #ifndef __SCOUT_MESSAGES_H__
 #define __SCOUT_MESSAGES_H__
 
+#include <Arduino.h>
 #include <time.h>
 #include <stateType.h>
 

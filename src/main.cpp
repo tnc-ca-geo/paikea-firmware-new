@@ -15,6 +15,7 @@
 #include <stateType.h>
 #include <scoutMessages.h>
 #include <storage.h>
+#include <helpers.h>
 // project
 #include "pindefs.h"
 
@@ -22,6 +23,7 @@
 #define DEBUG 1
 #define SLEEP 1
 #define USE_DISPLAY 1
+#define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
 
 // Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
@@ -65,47 +67,20 @@ time_t getTime() {
 }
 
 /*
- * Set system time. Set also corrected start time if start is not already set.
- * TODO: remove reference to state
+ * Set system time.
  */
 void setTime(time_t time) {
   struct timeval new_time;
-  // time_t old_time = getTime();
   new_time.tv_sec = time;
   settimeofday(&new_time, NULL);
-  // if (!state.start_time) { state.start_time = time - old_time; }
 }
 
 /*
- * Determine wake up time, pegging it to a time raster starting at the full hour
+ * Shorthand for getting system uptime.
  */
-time_t getNextWakeupTime(time_t now, uint16_t delay) {
-  time_t full_hour = int(now/3600) * 3600;
-  uint16_t cycles = int(now % 3600/delay);
-  return full_hour + (cycles + 1) * delay;
+uint32_t getUptime() {
+  return esp_timer_get_time() / 1E6;
 }
-
-/*
- * Get sleep difference from state
- */
-uint32_t getSleepDifference(systemState state) {
-  time_t now = getTime();
-  time_t wakeUp = getNextWakeupTime(now, state.frequency);
-  uint32_t difference = wakeUp - now;
-  difference = state.send_success ? difference : RETRY_TIME;
-  Serial.print("start: " ); Serial.println(state.start_time);
-  Serial.print("frequency: "); Serial.println(state.frequency);
-  Serial.print("now: "); Serial.println( getTime() );
-  Serial.print("wakeup time: "); Serial.println(wakeUp);
-  Serial.print("difference: "); Serial.println(difference);
-  // Serial.print("retries: "); Serial.println(state.retries - 1);
-  Serial.println();
-  // set minimum sleep time, to ensure we wake up
-  difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
-  difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP : difference;
-  return difference;
-}
-
 
 /*
  * Read the battery voltage (on start-up, no reason to get fancy here)
@@ -122,16 +97,22 @@ float readBatteryVoltage() {
  * Go to sleep
  */
 void goToSleep() {
-  char bfr[64] = {0};
+  char bfr[128] = {0};
+  uint32_t difference = getSleepDifference( state );
+  // Store data needed on wakeup
   storage.store( state );
-  uint32_t difference = getSleepDifference(state);
-  snprintf(bfr, 64,
-    "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n",
-    (uint32_t) state.frequency, difference);
+  // Output a message before sleeping
+  snprintf(bfr, 128, SLEEP_TEMPLATE, state.frequency, difference);
   Serial.print(bfr);
-  // Turn off peripherals, give some extra time
+  // give it an extra second
+  vTaskDelay( pdMS_TO_TICKS (1000) );
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
+    // Clear display, since we don't want to show anything while sleeping
     display.off();
+    // remove Rockblock task
+    rockblock.toggle(false);
+    vTaskDelete( rockblockTaskHandle );
+    // Set port expander to known state, i.e. peripherals off
     expander.init();
     xSemaphoreGive(mutex_i2c);
   }
@@ -168,7 +149,6 @@ void Task_blink(void *pvParamaters) {
  */
 void Task_display(void *pvParameters) {
   uint8_t size = 0;
-  char message_string[44] = {0};
   char out_string[44] = {0};
   char time_string[22] = {0};
   time_t time = 0;
@@ -176,15 +156,13 @@ void Task_display(void *pvParameters) {
     time = getTime();
     strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
     snprintf(
-      out_string, 50, "%s\nsignal %3d\n%s", time_string, state.signal,
-      message_string);
+      out_string, 50, "%s\nsignal %3d\n", time_string, state.signal);
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
       display.set(out_string);
       xSemaphoreGive(mutex_i2c);
     }
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
-
 }
 
 /*
@@ -213,12 +191,19 @@ void Task_gps(void *pvParameters) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
-  time_t gps_start = esp_timer_get_time() / 1E6;
-  Serial.println("\nWaiting for GPS fix.");
+  time_t gps_start = getUptime();
+  uint8_t counter = 0;
+  Serial.println("\nGPS: Waiting for fix.");
   for(;;) {
+
+    counter += 1;
+    if (counter == 40) { Serial.println("GPS: Still waiting for fix."); };
+    counter = (counter > 40) ? 0 : counter;
     gps.loop();
+
     if (gps.updated) {
       sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
+      Serial.print(bfr);
       if (xSemaphoreTake(mutex_state, 200)) {
         state.lat = gps.lat;
         state.lng = gps.lng;
@@ -284,7 +269,9 @@ void Task_main_loop(void *pvParameters) {
 
     // Wait for success and shut down Rockblock
     if ( state.message_sent && rockblock.sendSuccess ) {
+      Serial.println("SUCCESS");
       state.send_success = true;
+      state.retries = 3;
       rockblock.getLastIncoming(message);
       if (message[0] != '\0') {
         Serial.print("Incoming message: "); Serial.println(message);
@@ -293,8 +280,10 @@ void Task_main_loop(void *pvParameters) {
           Serial.println(state.frequency);
         }
       }
+
       // TODO: this is only used for blink state and can probably be removed
       state.rockblock_done = true;
+      state.retries = 3;
       goToSleep();
     }
 
@@ -306,16 +295,14 @@ void Task_main_loop(void *pvParameters) {
  * Timeout when not successful, consider this a gentle watchdog
  */
 void Task_timeout(void *pvParameters) {
-  char bfr[64] = {0};
   for (;;) {
-    if ( esp_timer_get_time()/1E6 > TIME_OUT ) {
-      snprintf(
-        bfr, 64, "System timed out after %d, retry in %d seconds.",
-        TIME_OUT, RETRY_TIME);
-      Serial.println(bfr);
+    if ( getUptime() > TIME_OUT ) {
+      Serial.print("System timed out after "); Serial.println(TIME_OUT);
+      state.retries = state.retries - 1;
+      Serial.print("Retries left: "); Serial.println(state.retries);
       goToSleep();
     }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    vTaskDelay( pdMS_TO_TICKS( 2000 ) );
   }
 }
 

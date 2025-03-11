@@ -1,9 +1,9 @@
 /*
- * Define the state type here for better testibility
+ * Define state type for better testibility
  */
 #ifndef __SCOUT_STATE_TYPES__
 #define __SCOUT_STATE_TYPES__
-#include <Arduino.h>
+
 
 typedef struct {
     time_t start_time = 0;
@@ -11,6 +11,7 @@ typedef struct {
     // TODO: remove
     uint32_t prior_uptime = 0;
     uint32_t frequency = 600;
+    uint8_t retries = 3;
     // TODO: remove
     bool go_to_sleep = 0;
     bool gps_done = 0;
@@ -25,6 +26,10 @@ typedef struct {
     float speed=0; // speed in knots
     float bat=0;
     uint8_t signal = 0;
+    // setting timeout to 300 seconds
+    const uint16_t timeout = 300;
+    // setting retry time to 120 seconds
+    const uint16_t retry_time = 120;
     char message[255] = {0};
 } systemState;
 

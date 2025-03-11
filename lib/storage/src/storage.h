@@ -8,20 +8,18 @@
 #include <Preferences.h>
 #include <stateType.h>
 
-
 inline RTC_DATA_ATTR time_t rtc_start = 0;
 inline RTC_DATA_ATTR uint32_t rtc_frequency = 600;
 inline RTC_DATA_ATTR bool rtc_first_run = true;
 inline RTC_DATA_ATTR uint8_t rtc_retries = 3;
 
-
 /*
  * Store or restore some parts of the system state. Some aspects need to be
- * stored during sleep others might be even under power off (currently not
- * utilized.)
+ * stored during sleep others might need to be stored even under power off
+ * (currently not utilized.)
  *
- * IMPROVEMENT? We currently only partially store the state, however since it
- * is a struct, we could also do the whole thing.
+ * IMPROVEMENT? We only store the state partially. Since it is a struct, we
+ * might be able to store the entire state.
  */
 class ScoutStorage {
 

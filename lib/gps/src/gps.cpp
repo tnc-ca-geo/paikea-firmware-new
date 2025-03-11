@@ -45,10 +45,6 @@ void Gps::loop() {
         this->lng = this->gps_parser.location.lng();
         this->speed = this->gps_parser.speed.knots();
         this->heading = this->gps_parser.course.deg();
-        Serial.print("LAT: "); Serial.print(this->lat, 6);
-        Serial.print(", LON: "); Serial.print(this->lng, 6);
-        Serial.print(", SOG: "); Serial.print(this->speed, 2);
-        Serial.print(", COG: "); Serial.println(this->heading, 2);
         this->updated = true;
     } else this->updated = false;
 }

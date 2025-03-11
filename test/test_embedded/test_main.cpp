@@ -1,5 +1,6 @@
 #include <unity.h>
 #include "test_rockblock.h"
+#include "test_helpers.h"
 #define UNITY_DOUBLE_PRECISION 1e-12
 
 void setUp() {}
@@ -18,6 +19,8 @@ int runUnityTests() {
     RUN_TEST(testPayloadParsing);
     RUN_TEST(testPayloadParsingMultipleLines);
     RUN_TEST(testPayloadParsingMultipleEmpty);
+    // test helpers
+    RUN_TEST(testGetSleepDifference);
     return UNITY_END();
 }
 

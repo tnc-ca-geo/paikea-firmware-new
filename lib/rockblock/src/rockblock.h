@@ -65,6 +65,7 @@ class Rockblock {
         uint8_t signal = 0;
         void readAndAppendResponse();
         void sendCommand(const char *command);
+        void run();
 
     public:
         Rockblock(AbstractExpander &expander, AbstractSerial &serial);

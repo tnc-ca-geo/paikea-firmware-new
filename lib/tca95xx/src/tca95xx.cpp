@@ -50,7 +50,7 @@ uint8_t Expander::read(uint8_t addr) {
     wire->beginTransmission(this->address);
     wire->write(addr);
     wire->endTransmission();
-    wire->requestFrom(this->address, 1);
+    wire->requestFrom(this->address, (int) 1);
     uint8_t value = wire->read();
     wire->endTransmission();
     return value;
