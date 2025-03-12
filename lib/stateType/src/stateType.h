@@ -27,9 +27,9 @@ typedef struct {
     float bat=0;
     uint8_t signal = 0;
     // setting timeout to 300 seconds
-    const uint16_t timeout = 300;
+    const uint16_t timeout = 600;
     // setting retry time to 120 seconds
-    const uint16_t retry_time = 120;
+    const uint16_t retry_time = 600;
     char message[255] = {0};
 } systemState;
 

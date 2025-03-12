@@ -60,12 +60,11 @@ ird_rts     1     7    0
 #define BATT_FUDGE 1.1 // everyone seems to add a fudge factor here
 // constants
 #define DEFAULT_SLEEP_TIME 600
-// give more time on first run
-#define RETRY_TIME 120
+#define RETRY_TIME 600
 // time after which system is shutdown no matter what, 5 minutes
 #define TIME_OUT 300
 // time before we decide that we won't get a fix
-#define GPS_TIME_OUT 300    // IMPLEMENT
+#define GPS_TIME_OUT 120    // IMPLEMENT
 // time we wake up early (before send time)
 #define GPS_DELAY 20        // IMPLEMENT
 // Minimum reporting time, 300s = 5min
