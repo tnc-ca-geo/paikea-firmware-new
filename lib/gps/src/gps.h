@@ -16,13 +16,15 @@ private:
     HardwareSerial* serial;
     Expander* expander;
     TinyGPSPlus gps_parser;
+    uint8_t enable_pin;
     bool enabled = false;
+    time_t start_time = 0;
 
 public:
     // Variables
     time_t epoch = 0;
     // Time when GPS was read, to correct for delayed processing.
-    uint64_t gps_read_system_time = 0; //0xFFFFFFFFFFFFFFFF;
+    time_t gps_read_system_time = 0;
     bool updated = false;
     float lat;
     float lng;
@@ -30,10 +32,10 @@ public:
     float speed;
     float heading;
     // Constructor
-    Gps(Expander &expander, HardwareSerial &serial);
+    Gps(Expander &expander, HardwareSerial &seria, uint8_t enable_pin);
     // Methods
     // Return epoch corrected by the time passed since last GPS read.
-    uint64_t get_corrected_epoch();
+    time_t get_corrected_epoch();
     void enable();
     void disable();
     void loop();

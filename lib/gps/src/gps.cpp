@@ -1,34 +1,34 @@
 #include <gps.h>
 
+#define GPS_BFR_LEN 64
+#define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f\nGPS time: %f\n"
 
-const uint8_t BUFFER_SIZE = 255;
-
-
-Gps::Gps(Expander &expander, HardwareSerial &serial) {
+Gps::Gps(Expander &expander, HardwareSerial &serial, uint8_t enable_pin) {
     this->expander = &expander;
     this->serial = &serial;
+    this->enable_pin = enable_pin;
 }
 
 
 void Gps::enable() {
-    // flush Serial
+    // flush Serial buffer
     if (this->serial->available()) this->serial->read();
-    this->expander->pinMode(0, EXPANDER_OUTPUT);
-    this->expander->digitalWrite(0, HIGH);
+    this->expander->pinMode(this->enable_pin, EXPANDER_OUTPUT);
+    this->expander->digitalWrite(this->enable_pin, HIGH);
     this->enabled = true;
+    this->start_time = esp_timer_get_time() / 1E6;
 }
 
 
 void Gps::disable() {
     this->enabled = false;
-    this->expander->digitalWrite(0, LOW);
-    // flush Serial
-    if (this->serial->available()) this->serial->read();
+    this->expander->digitalWrite(this->enable_pin, LOW);
 }
 
 
 void Gps::loop() {
     char character;
+    char bfr[GPS_BFR_LEN] = {0};
     while(this->serial->available()) {
         character = this->serial->read();
         this->gps_parser.encode(character);
@@ -46,35 +46,22 @@ void Gps::loop() {
         this->speed = this->gps_parser.speed.knots();
         this->heading = this->gps_parser.course.deg();
         this->updated = true;
+        snprintf(bfr, GPS_BFR_LEN, GPS_MESSAGE_TEMPLATE, this->lat, this->lng,
+            esp_timer_get_time()/1E6 - this->start_time);
+        Serial.println(bfr);
     } else this->updated = false;
 }
 
-
-uint64_t Gps::get_corrected_epoch() {
+/*
+ * This should give the actual time since it keeps track of the system time
+ * and the time GPS was read.
+ */
+time_t Gps::get_corrected_epoch() {
     return this->epoch + (
-        esp_timer_get_time() - this->gps_read_system_time )/1E6;
+        esp_timer_get_time() - this->gps_read_system_time ) / 1E6;
 };
 
-
-/*
- * Read one line from the GPS and store into buffer. This is currently unused
- * because the TinyGPSPlus library is managing this.
- */
-void Gps::readln(char *buffer) {
-    uint8_t i=0;
-    buffer[0] = 0;
-    while (this->serial->available()) {
-        uint8_t c=this->serial->read();
-        if ((c == '\n') || (c == '\r') || (i > BUFFER_SIZE)) {
-            buffer[i] = 0;
-            break;
-        }
-        buffer[i] = c;
-        i++;
-    }
-}
-
-// assuming that 1 second precision is enough for our purposes
+// assume that 1 second precision is enough for our purposes
 time_t Gps::time_to_epoch(TinyGPSDate date, TinyGPSTime time) {
     struct tm t={0};
     t.tm_year = date.year() - 1900;

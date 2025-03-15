@@ -11,16 +11,13 @@
 #include <vector>
 #include <map>
 
-// TODO: Determine actual maximum sizes. There is plenty of memory though.
+// TODO: Determine actual maximum sizes, there is plenty of memory, we can be
+// generous for now.
 #define MAX_COMMAND_SIZE 64
 #define MAX_RESPONSE_SIZE 64
+// This number is from the Rockblock documentation
 #define MAX_MESSAGE_SIZE 340
 #define MAX_FRAME_SIZE 512
-#define OK_TOKEN "OK"
-#define ERROR_TOKEN "ERROR"
-#define READY_TOKEN "READY"
-#define SEND_THRESHOLD 2
-#define LINE_SEP "\r\n"
 
 // Rockblock status type
 enum RockblockStatus { WAIT_STATUS, OK_STATUS, READY_STATUS, ERROR_STATUS };
@@ -51,31 +48,33 @@ class Rockblock {
     private:
         AbstractSerial* serial;
         AbstractExpander* expander;
+        int enable_pin;
         FrameParser parser = FrameParser();
         char message[MAX_MESSAGE_SIZE] = {0};
         char incoming[MAX_MESSAGE_SIZE] = {0};
         time_t start_time;
-        uint8_t retries = 0;
-        uint8_t success = 0;
+        // int works easily with snprintf
+        int retries = 3;
+        int signal = 0;
         // buffer for unhandled serial data, TODO: eliminate
         char stream[1024] = {0};
         bool on = false;
         bool queued = false;
         bool commandWaiting = false;
-        uint8_t signal = 0;
         void readAndAppendResponse();
         void sendCommand(const char *command);
         void run();
 
     public:
-        Rockblock(AbstractExpander &expander, AbstractSerial &serial);
+        Rockblock(AbstractExpander &expander, AbstractSerial &serial,
+            int enable_pin);
         StateMachine state = OFFLINE;
         bool sendSuccess = false;
         void sendMessage(char *buffer, size_t len=255);
         void getLastIncoming(char *buffer, size_t len=MAX_MESSAGE_SIZE);
-        uint8_t getSignalStrength();
+        int getSignalStrength();
         void toggle(bool on=false);
-        // process loop, we passing in the timer for better testibility,
+        // process loop
         void loop();
 };
 

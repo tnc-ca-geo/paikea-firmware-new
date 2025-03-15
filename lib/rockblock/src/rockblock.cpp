@@ -2,29 +2,41 @@
 #include <cstring>
 #include <vector>
 
-// This unfortunately requires the Arduino String class to be printable.
+#define OK_TOKEN "OK"
+#define ERROR_TOKEN "ERROR"
+#define READY_TOKEN "READY"
+#define SEND_THRESHOLD 3
+#define LINE_SEP "\r\n"
+#define SEP_LEN 2
+
+/*
+ * Implemented Rockblock commands, see
+ *
+ * https://cdn.sparkfun.com/assets/6/d/4/c/a/RockBLOCK-9603-Developers-Guide_1.pdf
+ * Iridium%20ISU%20AT%20Command%20Reference%20v5%20(1).pdf
+ */
+// Basic AT interaction, will be extended to AT\r\n, currently not used
+#define AT_COMMAND ""
+// Create a prompt to store text message
+#define SBDWT_COMMAND "+SBDWT"
+// We could extent on the SBDIX command since it would take a location as
+// argument which might save on payload size.
+#define SBDIX_COMMAND "+SBDIX"
+// signal strength command
+#define CSQ_COMMAND "+CSQ"
+// clear MO and MT buffer command
+#define SBDD_COMMAND "+SBDD2"
+// retrieve incoming message
+#define SBDRT_COMMAND "+SBDRT"
+
+#define RB_SUCCESS_TEMPLATE "Rockblock send success!\nTime: %.0f seconds\nRetries: %d\nTrigger signal strength: %d\n"
+
+// This unfortunately requires the Arduino String class in order to be
+// printable.
 std::map<RockblockStatus, String> statusLabels = {
     {WAIT_STATUS, "WAIT"}, {OK_STATUS, "OK"}, {READY_STATUS, "READY"},
     {ERROR_STATUS, "ERROR"}
 };
-
-/*
- * Implemented Rockblock commands, see
- * file:///Users/falk.schuetzenmeister/Downloads/Iridium%20ISU%20AT%20Command%20Reference%20v5%20(1).pdf
- */
-// Basic AT interaction, will be extended to AT\r\n
-const char* AT_COMMAND = "";
-// Create a prompt to store text message
-const char* SBDWT_COMMAND = "SBDWT";
-// We could extent on the SBDIX command since it would take a location as
-// argument which might save on payload size.
-const char* SBDIX_COMMAND = "SBDIX";
-// signal strength command
-const char* CSQ_COMMAND = "CSQ";
-// clear MO buffer command
-const char* SBDD_COMMAND = "SBDD2";
-// retrieve incoming message
-const char* SBDRT_COMMAND = "SBDRT";
 
 /*
  * Strsep for multiple character delimiters.
@@ -88,7 +100,6 @@ void FrameParser::parseResponse(const char* line) {
  * empty tokens.
  */
 void FrameParser::parse(const char* frame) {
-    const uint8_t sep_len = strlen(LINE_SEP);
     // strsep_multi will consume the buffer, use a copy to allow for const
     char* rest = strdup(frame);
     char* token = nullptr;
@@ -142,8 +153,8 @@ void FrameParser::parse(const char* frame) {
         // - After that it should be tolerant to any content
         if ( (idx == 2 && token[0] != '\0') || (idx > 2 && pld_idx > 0) ) {
             if (pld_idx > 0) {
-                strncpy(pld + pld_idx, LINE_SEP, sep_len);
-                pld_idx += sep_len;
+                strncpy(pld + pld_idx, LINE_SEP, SEP_LEN);
+                pld_idx += SEP_LEN;
             }
             strncpy(pld + pld_idx, token, MAX_MESSAGE_SIZE - pld_idx);
             pld_idx += strlen(token);
@@ -153,16 +164,19 @@ void FrameParser::parse(const char* frame) {
         if (token[0] != 0) { idx++; }
     }
     // Our current parse method will generate trailing SEP
-    if (pld_idx > sep_len) { strncpy(this->payload, pld, pld_idx-sep_len); }
+    if (pld_idx > SEP_LEN) { strncpy(this->payload, pld, pld_idx-SEP_LEN); }
 }
 
 /*
  * Initialize Rockblock instance by passing IO expander and HardwareSerial
  * reference.
  */
-Rockblock::Rockblock(AbstractExpander &expander, AbstractSerial &serial) {
+Rockblock::Rockblock(AbstractExpander &expander,
+    AbstractSerial &serial, int enable_pin
+) {
     this->expander = &expander;
     this->serial = &serial;
+    this->enable_pin = enable_pin;
 }
 
 /*
@@ -170,14 +184,12 @@ Rockblock::Rockblock(AbstractExpander &expander, AbstractSerial &serial) {
  */
 void Rockblock::sendCommand(const char* command) {
     char commandBfr[10] = {0};
-    snprintf(commandBfr, 10, "AT+%s\r\n", command);
-    // Serial.print("\nSend Command: "); Serial.println(commandBfr);
-    // for characteristics
+    snprintf(commandBfr, 10, "AT%s\r\n", command);
     if (!this->commandWaiting) {
         this->commandWaiting = true;
         this->serial->print(commandBfr);
     } else {
-        Serial.println("DEBUG: Command already waiting");
+        Serial.println("Failure. Command in process.");
     }
 }
 
@@ -185,36 +197,37 @@ void Rockblock::sendCommand(const char* command) {
  * Queue a message to send
  */
 void Rockblock::sendMessage(char* bfr, size_t len) {
-    Serial.println("Queueing message and deleting incoming");
+    Serial.println("Queue message and delete incoming");
     memset(this->message, 0, MAX_MESSAGE_SIZE);
     memset(this->incoming, 0, MAX_MESSAGE_SIZE);
     snprintf(this->message, 340, "%s\r", bfr);
-    start_time = esp_timer_get_time() / 1E6;
-    retries = 0;
+    this->start_time = esp_timer_get_time() / 1E6;
+    this->retries = 0;
     this->queued = true;
     this->sendSuccess = false;
 };
 
 /*
- * Get the incoming message. Will be only available untile new message is sent.
+ * Get incoming message. Incoming message is only available until .sendMessage()
+ * called.
  */
 void Rockblock::getLastIncoming(char *bfr, size_t len) {
     strncpy(bfr, this->incoming, MAX_MESSAGE_SIZE-1);
 };
 
 /*
- * Make signal strength readable
+ * Public getter for signal strength
  */
-uint8_t Rockblock::getSignalStrength() {
+int Rockblock::getSignalStrength() {
     return this->signal;
 }
 
 /*
- * Turn Rockblock on before sending and turn it off before sleep
+ * Turn Rockblock on before sending and turn off before sleeping
  */
 void Rockblock::toggle(bool on) {
-    this->expander->pinMode(13, EXPANDER_OUTPUT);
-    this->expander->digitalWrite(13, !on);
+    this->expander->pinMode(this->enable_pin, EXPANDER_OUTPUT);
+    this->expander->digitalWrite(this->enable_pin, !on);
     this->on = on;
 }
 
@@ -240,13 +253,11 @@ void Rockblock::readAndAppendResponse() {
  */
 void Rockblock::run() {
 
-    // Assume WAIT_STATUS if no other status can be parsed
+    // Assume WAIT_STATUS if parser does not return other
     RockblockStatus status = WAIT_STATUS;
-    char frame[255] = {0};
-
-    // Rockblock is not able to respond in this state, no matter from which
-    // state we are coming; avoid communication errors.
-    if (this->on == 0) { this->state == OFFLINE; }
+    char frame[MAX_FRAME_SIZE] = {0};
+    // for debug output
+    char bfr[255] = {0};
 
     // copy latest incoming serial data to this->stream
     this->readAndAppendResponse();
@@ -255,7 +266,7 @@ void Rockblock::run() {
     // parse the frame
     this->parser.parse(frame);
 
-    // clear command waiting if OK status
+    // clear command waiting if OK, READY, or ERROR status
     if (
         parser.status == OK_STATUS || parser.status == READY_STATUS ||
         parser.status == ERROR_STATUS)
@@ -263,7 +274,15 @@ void Rockblock::run() {
         this->commandWaiting = false;
     }
 
-    // Some debug output
+    // Add more error handling, however there is not much to do, error
+    // indicates that a command was not issus correctly in the sense of
+    // a syntax or value error. Our code would be solely reponsible for this.
+    if (parser.status == ERROR_STATUS) {
+        Serial.println("Rockblock error");
+        return;
+    }
+
+    // some debug output
     if (frame[0] != 0) {
         // Serial.println("FRAME");
         // Serial.println(frame);
@@ -271,15 +290,9 @@ void Rockblock::run() {
         Serial.print("Last response: "); Serial.println(this->parser.response);
         Serial.print("Status: ");
         Serial.println(statusLabels[this->parser.status]);
-        /* Serial.print("Values: ");
-        for (size_t i = 0; i < this->parser.values.size(); i++) {
-            Serial.print(this->parser.values[i]); Serial.print(", ");
-        }
-        Serial.println();*/
     }
 
-    // We need this because it is a combination of device status and user
-    // workflow
+    // This is a combination of device status and user workflow
     bool ready_for_command = (
         parser.status == WAIT_STATUS && !this->commandWaiting);
 
@@ -320,12 +333,9 @@ void Rockblock::run() {
                 parser.status == OK_STATUS &&
                 strstr(this->parser.command, CSQ_COMMAND) != nullptr
             ) {
-                Serial.print("Signal strength: ");
-                Serial.print(this->parser.values[0]);
                 this->signal = this->parser.values[0];
-                if (this->parser.values[0] > SEND_THRESHOLD) {
-                    // store actual send threshold
-                    this->success = this->parser.values[0];
+                Serial.print("Signal strength: "); Serial.print(this->signal);
+                if (this->parser.values[0] >= SEND_THRESHOLD) {
                     Serial.println(" -> attempt sending");
                     this->state = SENDING;
                 } else {
@@ -345,14 +355,17 @@ void Rockblock::run() {
             ) {
                 if (this->parser.values[0] < 5) {
                     this->queued = false;
-                    Serial.print("Time in seconds ");
-                    Serial.println(esp_timer_get_time()/1E6 - this->start_time);
-                    Serial.print("Retries "); Serial.println(this->retries);
-                    Serial.print("Trigger signal strength ");
-                    Serial.println(this->success);
-                    // check for new incoming message
+                    // Success output
+                    snprintf(bfr, 255, RB_SUCCESS_TEMPLATE,
+                        esp_timer_get_time() / 1E6 - this->start_time,
+                        this->retries, this->signal);
+                    Serial.print(bfr);
+                    Serial.println(esp_timer_get_time() / 1E6 - this->start_time);
+                    Serial.println(this->retries);
+                    Serial.println(this->signal);
+                    // check for incoming message
                     if (this->parser.values[2] == 1) {
-                        Serial.println("Incoming message");
+                        Serial.println("Message waiting");
                         this->state = INCOMING;
                     } else {
                         this->state = IDLE;
@@ -381,7 +394,5 @@ void Rockblock::run() {
 
 
 void Rockblock::loop() {
-    if (this->on) {
-        this->run();
-    }
+    if (this->on) { this->run(); }
 }

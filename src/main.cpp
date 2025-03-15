@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <math.h>
 // my libraries
 #include <tca95xx.h>
 #include <gps.h>
@@ -45,11 +46,12 @@ RockblockSerial rockblock_serial = RockblockSerial();
 // Port Expander using i2c
 Expander expander = Expander(Wire);
 // GPS using UART
-Gps gps = Gps(expander, gps_serial);
+Gps gps = Gps(expander, gps_serial, PORT_EXPANDER_GPS_ENABLE_PIN);
 // Display using i2c, for development only.
 LilyGoDisplay display = LilyGoDisplay(Wire);
 // Rockblock or Lora Simulation
-Rockblock rockblock = Rockblock(expander, rockblock_serial);
+Rockblock rockblock = Rockblock(
+  expander, rockblock_serial, PORT_EXPANDER_ROCKBLOCK_ENABLE_PIN);
 // State object
 systemState state;
 // Storage
@@ -78,8 +80,8 @@ void setTime(time_t time) {
 /*
  * Shorthand for getting system uptime.
  */
-uint32_t getUptime() {
-  return esp_timer_get_time() / 1E6;
+uint16_t getRunTime() {
+  return round(esp_timer_get_time() / 1E6);
 }
 
 /*
@@ -91,6 +93,15 @@ float readBatteryVoltage() {
     readings += (float) analogReadMilliVolts(BATT_ADC)/10000;
   }
   return readings * (BATT_R_UPPER + BATT_R_LOWER)/BATT_R_LOWER;
+}
+
+void update_state_from_gps(systemState &state, Gps gps) {
+  state.lat = gps.lat;
+  state.lng = gps.lng;
+  state.heading = gps.heading;
+  state.speed = gps.speed;
+  state.gps_done = true;
+  state.gps_read_time = gps.get_corrected_epoch();
 }
 
 /*
@@ -187,48 +198,48 @@ void Task_rockblock(void *pvParameters) {
  */
 void Task_gps(void *pvParameters) {
   char bfr[32] = {};
+  bool debug_output = false;
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
-  time_t gps_start = getUptime();
-  uint8_t counter = 0;
-  Serial.println("\nGPS: Waiting for fix.");
+
   for(;;) {
 
-    counter += 1;
-    if (counter == 40) { Serial.println("GPS: Still waiting for fix."); };
-    counter = (counter > 40) ? 0 : counter;
+    if (getRunTime() % 3 == 0) {
+      if (!debug_output) {
+        Serial.println("GPS: Waiting for fix.");
+        debug_output = true;
+      }
+    } else {
+      debug_output = false;
+    };
+
     gps.loop();
 
     if (gps.updated) {
-      sprintf(bfr, "GPS updated: %.05f, %.05f\n", gps.lat, gps.lng);
-      Serial.print(bfr);
+
       if (xSemaphoreTake(mutex_state, 200)) {
-        state.lat = gps.lat;
-        state.lng = gps.lng;
-        state.heading = gps.heading;
-        state.speed = gps.speed;
-        state.gps_done = true;
-        state.gps_read_time = gps.get_corrected_epoch();
-        time_t old_time = getTime();
-        setTime( state.gps_read_time );
-        // set real system start time retroactively
+        update_state_from_gps(state, gps);
+        // set real system start time retroactively (on first run)
         if (state.start_time == 0) {
-          state.start_time = state.gps_read_time - old_time;
+          state.start_time = state.gps_read_time - getTime();
         }
         xSemaphoreGive(mutex_state);
       }
+
+      // set system time
+      setTime( state.gps_read_time );
+
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-        Serial.print("GPS time: ");
-        Serial.println( esp_timer_get_time() / 1E6 - gps_start );
         gps.disable();
         xSemaphoreGive(mutex_i2c);
       }
       vTaskDelete( gpsTaskHandle );
     }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
+
+  vTaskDelay( pdMS_TO_TICKS( 100 ) );
 }
 
 /*
@@ -287,7 +298,7 @@ void Task_main_loop(void *pvParameters) {
       goToSleep();
     }
 
-    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
+    vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
 
@@ -296,7 +307,7 @@ void Task_main_loop(void *pvParameters) {
  */
 void Task_timeout(void *pvParameters) {
   for (;;) {
-    if ( getUptime() > TIME_OUT ) {
+    if ( getRunTime() > TIME_OUT ) {
       Serial.print("System timed out after "); Serial.println(TIME_OUT);
       state.retries = state.retries - 1;
       Serial.print("Retries left: "); Serial.println(state.retries);
@@ -342,8 +353,6 @@ void setup() {
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);
   Serial.println();
-  // ---- Give some time to stabilize -------------
-  vTaskDelay( pdTICKS_TO_MS(100) );
 
   /*
    * FreeRTOS setup
@@ -377,7 +386,7 @@ void setup() {
   xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10,
     &timeoutTaskHandle);
 #if DEBUG
-  /* xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL); */
+  // xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
   xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
 #endif
 }
