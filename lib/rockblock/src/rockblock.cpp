@@ -360,9 +360,6 @@ void Rockblock::run() {
                         esp_timer_get_time() / 1E6 - this->start_time,
                         this->retries, this->signal);
                     Serial.print(bfr);
-                    Serial.println(esp_timer_get_time() / 1E6 - this->start_time);
-                    Serial.println(this->retries);
-                    Serial.println(this->signal);
                     // check for incoming message
                     if (this->parser.values[2] == 1) {
                         Serial.println("Message waiting");

@@ -20,6 +20,7 @@ int runUnityTests() {
     RUN_TEST(testPayloadParsingMultipleLines);
     RUN_TEST(testPayloadParsingMultipleEmpty);
     // test helpers
+    RUN_TEST(testGetNextWakeupTime);
     RUN_TEST(testGetSleepDifference);
     return UNITY_END();
 }

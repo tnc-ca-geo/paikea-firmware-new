@@ -26,6 +26,14 @@
 #define USE_DISPLAY 1
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
 
+enum mainFSM {
+  AWAKE,
+  WAITING_FOR_GPS,
+  WAITING_FOR_RB,
+  RB_DONE,
+  SLEEP_READY
+};
+
 // Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
 // Use to protect state object if not atomic, ideally we would modify state
@@ -109,7 +117,7 @@ void update_state_from_gps(systemState &state, Gps gps) {
  */
 void goToSleep() {
   char bfr[128] = {0};
-  uint32_t difference = getSleepDifference( state, getTime() );
+  int difference = getSleepDifference( state, getTime() );
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
@@ -159,7 +167,6 @@ void Task_blink(void *pvParamaters) {
  * DEBUG ONLY: Output part of the state to the display. Use mutex for I2C bus.
  */
 void Task_display(void *pvParameters) {
-  uint8_t size = 0;
   char out_string[44] = {0};
   char time_string[22] = {0};
   time_t time = 0;
@@ -187,8 +194,9 @@ void Task_rockblock(void *pvParameters) {
   }
   for (;;) {
     rockblock.loop();
+    // to display signal strength
     state.signal = rockblock.getSignalStrength();
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
 
@@ -197,7 +205,6 @@ void Task_rockblock(void *pvParameters) {
  * TODO: There is a lot of copying values going on.
  */
 void Task_gps(void *pvParameters) {
-  char bfr[32] = {};
   bool debug_output = false;
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     gps.enable();
@@ -218,19 +225,6 @@ void Task_gps(void *pvParameters) {
     gps.loop();
 
     if (gps.updated) {
-
-      if (xSemaphoreTake(mutex_state, 200)) {
-        update_state_from_gps(state, gps);
-        // set real system start time retroactively (on first run)
-        if (state.start_time == 0) {
-          state.start_time = state.gps_read_time - getTime();
-        }
-        xSemaphoreGive(mutex_state);
-      }
-
-      // set system time
-      setTime( state.gps_read_time );
-
       if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
         gps.disable();
         xSemaphoreGive(mutex_i2c);
@@ -260,44 +254,67 @@ void Task_time(void *pvParameters) {
 
 /*
  * Task - Manage timing and logic of all components
- * TODO: Implement more abstract state machine?
  * TODO: Implement timeouts and retries
  */
 void Task_main_loop(void *pvParameters) {
-
-  char message[255] = {0};
+  mainFSM fsm_state = AWAKE;
   for (;;) {
 
-    /*
-     * Wait until we get a fix and send message
-     * TODO: add GPS timeout?
-     */
-    if ( gps.updated && !state.message_sent ) {
-      messages.createPK001(message, state);
-      rockblock.sendMessage(message);
-      state.message_sent = true;
-    }
+    switch (fsm_state) {
 
-    // Wait for success and shut down Rockblock
-    if ( state.message_sent && rockblock.sendSuccess ) {
-      Serial.println("SUCCESS");
-      state.send_success = true;
-      state.retries = 3;
-      rockblock.getLastIncoming(message);
-      if (message[0] != '\0') {
-        Serial.print("Incoming message: "); Serial.println(message);
-        if ( messages.parseIncoming(state, message) ) {
-          Serial.print("New reporting time: ");
-          Serial.println(state.frequency);
-        }
+      case AWAKE: {
+        // TODO: move some of the preparation from setup here
+        fsm_state = WAITING_FOR_GPS;
+        break;
       }
 
-      // TODO: this is only used for blink state and can probably be removed
-      state.rockblock_done = true;
-      state.retries = 3;
-      goToSleep();
-    }
+      case WAITING_FOR_GPS: {
+        if (gps.updated || getRunTime() > GPS_TIME_OUT) {
+          char bfr[255] = {0};
+          update_state_from_gps(state, gps);
+          if (state.start_time == 0) {
+            state.start_time = state.gps_read_time - getTime();
+          }
+          setTime( state.gps_read_time );
+          messages.createPK001(bfr, state);
+          rockblock.sendMessage(bfr);
+          fsm_state = WAITING_FOR_RB;
+        }
+        break;
+      };
 
+      case WAITING_FOR_RB: {
+        if (rockblock.sendSuccess) {
+          fsm_state = RB_DONE;
+        }
+        break;
+      };
+
+      case RB_DONE: {
+        char bfr[255] = {0};
+        Serial.println("SUCCESS");
+        state.send_success = true;
+        // used only for blink state
+        state.rockblock_done = true;
+        state.retries = 3;
+        rockblock.getLastIncoming(bfr);
+        if (bfr[0] != '\0') {
+          Serial.print("Incoming message: "); Serial.println(bfr);
+          if ( messages.parseIncoming(state, bfr) ) {
+            Serial.print("New reporting time: ");
+            Serial.println(state.frequency);
+          }
+        }
+        fsm_state = SLEEP_READY;
+        break;
+      };
+
+      case SLEEP_READY: {
+        goToSleep();
+        break;
+      }
+
+    }
     vTaskDelay( pdMS_TO_TICKS( 200 ) );
   }
 }
@@ -308,7 +325,8 @@ void Task_main_loop(void *pvParameters) {
 void Task_timeout(void *pvParameters) {
   for (;;) {
     if ( getRunTime() > TIME_OUT ) {
-      Serial.print("System timed out after "); Serial.println(TIME_OUT);
+      Serial.print("TIMEOUT after "); Serial.print(TIME_OUT);
+      Serial.println(" seconds.");
       state.retries = state.retries - 1;
       Serial.print("Retries left: "); Serial.println(state.retries);
       goToSleep();
