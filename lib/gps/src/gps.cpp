@@ -1,14 +1,10 @@
 #include <gps.h>
 
-#define GPS_BFR_LEN 64
-#define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f\nGPS time: %f\n"
-
 Gps::Gps(Expander &expander, HardwareSerial &serial, uint8_t enable_pin) {
     this->expander = &expander;
     this->serial = &serial;
     this->enable_pin = enable_pin;
 }
-
 
 void Gps::enable() {
     // flush Serial buffer
@@ -19,16 +15,13 @@ void Gps::enable() {
     this->start_time = esp_timer_get_time() / 1E6;
 }
 
-
 void Gps::disable() {
     this->enabled = false;
     this->expander->digitalWrite(this->enable_pin, LOW);
 }
 
-
 void Gps::loop() {
     char character;
-    char bfr[GPS_BFR_LEN] = {0};
     while(this->serial->available()) {
         character = this->serial->read();
         this->gps_parser.encode(character);
@@ -46,9 +39,6 @@ void Gps::loop() {
         this->speed = this->gps_parser.speed.knots();
         this->heading = this->gps_parser.course.deg();
         this->updated = true;
-        snprintf(bfr, GPS_BFR_LEN, GPS_MESSAGE_TEMPLATE, this->lat, this->lng,
-            esp_timer_get_time()/1E6 - this->start_time);
-        Serial.println(bfr);
     } else this->updated = false;
 }
 

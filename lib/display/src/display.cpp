@@ -7,7 +7,6 @@ LilyGoDisplay::LilyGoDisplay(TwoWire& i2c) {
 void LilyGoDisplay::begin() {
   if(!this->displ.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
     Serial.println(F("SSD1306 allocation failed"));
-    // for(;;); // Don't proceed, loop forever
   }
 }
 
@@ -28,7 +27,4 @@ void LilyGoDisplay::set(char *bfr) {
 void LilyGoDisplay::off() {
   this->displ.clearDisplay();
   this->displ.display();
-}
-
-void LilyGoDisplay::loop() {
 }

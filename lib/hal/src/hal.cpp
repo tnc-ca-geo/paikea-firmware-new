@@ -30,7 +30,7 @@ RockblockSerial::RockblockSerial() {
 void RockblockSerial::begin(uint16_t serialSpeed, int serial8N1, uint8_t rxPin,
     uint8_t txPin) {
         this->serial->begin(serialSpeed, serial8N1, rxPin, txPin);
-        Serial.println("ROCKBLOCK SERIAL BEGIN SUCCESS");
+        // Serial.println("ROCKBLOCK SERIAL BEGIN SUCCESS");
     }
 
 void RockblockSerial::print(const char *bfr) { this->serial->print(bfr); }

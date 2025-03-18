@@ -39,6 +39,7 @@
 
 // printf templates
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
+#define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
 
 /*
  * Define states for Main FSM
@@ -249,10 +250,7 @@ void Task_gps(void *pvParameters) {
   }
 
   while(true) {
-    // show every 50 * 100 ms = 5s
-    if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
     gps.loop();
-    ctr++;
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 
@@ -282,7 +280,10 @@ void Task_main_loop(void *pvParameters) {
   mainFSM fsm_state = AWAKE;
   // use as needed
   char bfr[255] = {0};
-  for (;;) {
+  // use for timed action or output in increaments of 100ms, e.g. while waiting
+  // for state change
+  unsigned int ctr = 0;
+  while (true) {
 
     switch (fsm_state) {
 
@@ -296,9 +297,11 @@ void Task_main_loop(void *pvParameters) {
       case WAITING_FOR_GPS: {
         bool time_out_test = getRunTime() > GPS_TIME_OUT;
         if (gps.updated) {
-          Serial.println("GPS: Fix acquired.");
-          update_state_from_gps(state, gps);
           setTime( state.gps_read_time );
+          update_state_from_gps(state, gps);
+          snprintf(bfr, 255, GPS_MESSAGE_TEMPLATE, state.lat, state.lng,
+            getRunTime());
+          Serial.println(bfr);
         }
         if (time_out_test) {
           Serial.println("GPS: Timeout.");
@@ -317,6 +320,8 @@ void Task_main_loop(void *pvParameters) {
           rockblock.sendMessage(bfr);
           fsm_state = WAITING_FOR_RB;
         }
+        // show every 50 * 100 ms = 5s
+        if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
         break;
       };
 
@@ -361,22 +366,26 @@ void Task_main_loop(void *pvParameters) {
       }
 
     }
-    vTaskDelay( pdMS_TO_TICKS( 50 ) );
+    ctr++;
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
 /*
- * Hard timeout to recover hangup system, consider this a gentle watchdog,
- * hopefully that will never happen.
+ * Hard timeout to recover a hangup system. Consider this a gentle watchdog that
+ * is able to turn off peripherials. Hopefully this will never timeout, graceful
+ * timeout is handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
-  for (;;) {
+  while (true) {
     if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
-      Serial.print("HARD TIMEOUT after "); Serial.print(SYSTEM_TIME_OUT + 20);
-      Serial.println(" seconds.");
+      char bfr[64] = {0};
       state.retries = state.retries - 1;
-      Serial.print("Retries left: "); Serial.println(state.retries);
+      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds. Retries left: %d",
+        SYSTEM_TIME_OUT + 20, state.retries);
+      Serial.println(bfr);
       goToSleep();
+      vTaskDelete(NULL);
     }
     // no hurry here
     vTaskDelay( pdMS_TO_TICKS( 2000 ) );
@@ -386,7 +395,6 @@ void Task_timeout(void *pvParameters) {
 /*
  * Setup
  */
-
 void setup() {
   // ---- Start Serial for debugging --------------
   Serial.begin(115200);
@@ -402,7 +410,8 @@ void setup() {
   state.interval = DEFAULT_INTERVAL;
   // ---- Restore state
   storage.restore(state);
-  // ----- Init Display
+  // ----- Init Display, even if we don't use it in production we should
+  // properly turn it off.
   display.begin();
   #if not DEBUG
     display.off();
