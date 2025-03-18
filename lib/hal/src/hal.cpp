@@ -1,3 +1,10 @@
+/*
+ * This is a rudimentary hardware abstraction layer. If fully implemented it
+ * would allow us to run the firmware on different hardware platforms, i.e. on
+ * a desktop computer for testing.
+ *
+ * TODO: Fully implement.
+ */
 #include <hal.h>
 // Only include if we run on actual hardware
 #ifndef NATIVE

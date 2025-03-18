@@ -53,10 +53,9 @@ class Rockblock {
         char message[MAX_MESSAGE_SIZE] = {0};
         char incoming[MAX_MESSAGE_SIZE] = {0};
         time_t start_time;
-        // int works easily with snprintf
         int retries = 3;
         int signal = 0;
-        // buffer for unhandled serial data, TODO: eliminate
+        // buffer for unhandled serial data
         char stream[1024] = {0};
         bool on = false;
         bool queued = false;

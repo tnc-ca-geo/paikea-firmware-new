@@ -1,10 +1,22 @@
-/*
- * Firmware for Scout buoy device. This is a very stripped down, much simpler
- * version than the original one.
+/* -----------------------------------------------------------------------------
+ * Firmware for Scout buoy device.
+ *
+ * This is a very much stripped down, simpler version than the original (v2)
+ * MicroPython by Matt Arcady. We focus on simplicity, timing, and behavior that
+ * is transparent and predictable to the user.
+ *
+ * https://github.com/tnc-ca-geo/paikea-firmware-new.git
  *
  * falk.schuetzenmeister@tnc.org
+ * © The Nature Conservancy 2025
+ * -----------------------------------------------------------------------------
  */
 
+/*
+ * We still heavily relay on third party libraries (mostly from the Arduino
+ * ecosystsem that we should replace in the future with your own, IF this code
+ * will be widely used in production.
+ */
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
@@ -18,14 +30,19 @@
 #include <storage.h>
 #include <helpers.h>
 // project
-#include "pindefs.h"
+#include "pindefs.h" // contains hardware specs and defined defaults
 
 // debug flags
 #define DEBUG 1
 #define SLEEP 1
 #define USE_DISPLAY 1
+
+// printf templates
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
 
+/*
+ * Define states for Main FSM
+ */
 enum mainFSM {
   AWAKE,
   WAITING_FOR_GPS,
@@ -34,6 +51,9 @@ enum mainFSM {
   SLEEP_READY
 };
 
+/*
+ * FreeRTOS setup
+ */
 // Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
 // Use to protect state object if not atomic, ideally we would modify state
@@ -47,7 +67,9 @@ static TaskHandle_t gpsTaskHandle = NULL;
 static TaskHandle_t rockblockTaskHandle = NULL;
 static TaskHandle_t timeoutTaskHandle = NULL;
 
-// Initialize Hardware
+/*
+ * Hardware and peripheral objects
+ */
 HardwareSerial gps_serial(1);
 // Defined in hal.h
 RockblockSerial rockblock_serial = RockblockSerial();
@@ -68,7 +90,7 @@ ScoutStorage storage = ScoutStorage();
 ScoutMessages messages;
 
 /*
- * Read system time and return UNIX epoch.
+ * Read RTC system time and return UNIX epoch.
  */
 time_t getTime() {
   struct timeval tv_now;
@@ -77,7 +99,8 @@ time_t getTime() {
 }
 
 /*
- * Set system time.
+ * Set RTC system time. We relay on the ESP32 internal clock to continue timing
+ * through deep sleep.
  */
 void setTime(time_t time) {
   struct timeval new_time;
@@ -86,23 +109,28 @@ void setTime(time_t time) {
 }
 
 /*
- * Shorthand for getting system uptime.
+ * Shorthand for getting system uptime since wakeup (or power on).
  */
-uint16_t getRunTime() {
-  return round(esp_timer_get_time() / 1E6);
-}
+uint16_t getRunTime() { return round(esp_timer_get_time() / 1E6); }
 
 /*
- * Read the battery voltage (on start-up, no reason to get fancy here)
+ * Read battery voltage (on wakeup, no reason to get fancy here)
  */
 float readBatteryVoltage() {
   float readings = 0;
   for (uint8_t i=0; i<10; i++) {
+    // devide through 1000 and through 10 for 10 readings
     readings += (float) analogReadMilliVolts(BATT_ADC)/10000;
+    vTaskDelay( pdMS_TO_TICKS( 10 ) );
   }
+  // adjust for voltage divider
   return readings * (BATT_R_UPPER + BATT_R_LOWER)/BATT_R_LOWER;
 }
 
+/*
+ * Rather simple for now, might become a more complex function for state
+ * transition.
+ */
 void update_state_from_gps(systemState &state, Gps gps) {
   state.lat = gps.lat;
   state.lng = gps.lng;
@@ -138,6 +166,10 @@ void goToSleep() {
   esp_sleep_enable_timer_wakeup( difference * 1E6 );
   esp_deep_sleep_start();
 }
+
+/*
+ * Define FreeRTOS tasks
+ */
 
 /*
  * Blink LED 1 and 0 as simple system indicator.
@@ -179,7 +211,7 @@ void Task_display(void *pvParameters) {
       display.set(out_string);
       xSemaphoreGive(mutex_i2c);
     }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
 
@@ -205,22 +237,14 @@ void Task_rockblock(void *pvParameters) {
  * TODO: There is a lot of copying values going on.
  */
 void Task_gps(void *pvParameters) {
-  bool debug_output = false;
+  unsigned int ctr=0;
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
 
   for(;;) {
-
-    if (getRunTime() % 3 == 0) {
-      if (!debug_output) {
-        Serial.println("GPS: Waiting for fix.");
-        debug_output = true;
-      }
-    } else {
-      debug_output = false;
-    };
+    if (ctr % 30 == 0) { Serial.println("GPS: Waiting for fix."); }
 
     gps.loop();
 
@@ -231,9 +255,10 @@ void Task_gps(void *pvParameters) {
       }
       vTaskDelete( gpsTaskHandle );
     }
+    ctr++;
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 
-  vTaskDelay( pdMS_TO_TICKS( 100 ) );
 }
 
 /*
@@ -284,8 +309,15 @@ void Task_main_loop(void *pvParameters) {
       };
 
       case WAITING_FOR_RB: {
-        if (rockblock.sendSuccess) {
-          fsm_state = RB_DONE;
+        bool waitForRB = (
+          rockblock.state == SENDING || rockblock.state == INCOMING);
+        if (rockblock.sendSuccess) { fsm_state = RB_DONE; }
+        // gracefully shutdown RB before timoutTask would shut it it down no
+        // matter what
+        else if (getRunTime() > TIME_OUT and !waitForRB) {
+          Serial.println("TIMEOUT");
+          state.retries = state.retries - 1;
+          fsm_state = SLEEP_READY;
         }
         break;
       };
@@ -315,25 +347,31 @@ void Task_main_loop(void *pvParameters) {
       }
 
     }
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    vTaskDelay( pdMS_TO_TICKS( 50 ) );
   }
 }
 
 /*
- * Timeout when not successful, consider this a gentle watchdog
+ * Hard timeout to recover hangup system, consider this a gentle watchdog,
+ * hopefully that will never happen.
  */
 void Task_timeout(void *pvParameters) {
   for (;;) {
-    if ( getRunTime() > TIME_OUT ) {
-      Serial.print("TIMEOUT after "); Serial.print(TIME_OUT);
+    if ( getRunTime() > TIME_OUT + 20 ) {
+      Serial.print("HARD TIMEOUT after "); Serial.print(TIME_OUT);
       Serial.println(" seconds.");
       state.retries = state.retries - 1;
       Serial.print("Retries left: "); Serial.println(state.retries);
       goToSleep();
     }
+    // no hurry here
     vTaskDelay( pdMS_TO_TICKS( 2000 ) );
   }
 }
+
+/*
+ * Setup
+ */
 
 void setup() {
   // ---- Start Serial for debugging --------------
@@ -410,6 +448,6 @@ void setup() {
 }
 
 /*
- * Nothing to do here, thanks to FreeRTOS.
+ * Main loop: Nothing to do here, thanks to FreeRTOS.
  */
 void loop() {}
