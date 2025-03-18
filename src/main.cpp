@@ -59,13 +59,10 @@ static SemaphoreHandle_t mutex_i2c;
 // Use to protect state object if not atomic, ideally we would modify state
 // object only in one place
 static SemaphoreHandle_t mutex_state;
-// Create TaskhHandles, reduce number of tasks to one for each peripherial and
-// one for the main state object
-// static TaskHandle_t blinkTaskHandle = NULL;
-static TaskHandle_t displayTaskHandle = NULL;
-static TaskHandle_t gpsTaskHandle = NULL;
+// Create TaskhHandles, only needed if the task is deleted or suspended outside
+// of the task itself.
 static TaskHandle_t rockblockTaskHandle = NULL;
-static TaskHandle_t timeoutTaskHandle = NULL;
+static TaskHandle_t gpsTaskHandle = NULL;
 
 /*
  * Hardware and peripheral objects
@@ -138,6 +135,9 @@ void update_state_from_gps(systemState &state, Gps gps) {
   state.speed = gps.speed;
   state.gps_done = true;
   state.gps_read_time = gps.get_corrected_epoch();
+  if (state.start_time == 0) {
+    state.start_time = state.gps_read_time - getTime();
+  }
 }
 
 /*
@@ -183,7 +183,7 @@ void goToSleep() {
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
-  for(;;) {
+  while (true) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
       expander.digitalWrite( LED01, blink_state || state.gps_done );
       expander.digitalWrite(
@@ -202,7 +202,7 @@ void Task_display(void *pvParameters) {
   char out_string[44] = {0};
   char time_string[22] = {0};
   time_t time = 0;
-  for(;;) {
+  while (true) {
     time = getTime();
     strftime(time_string, 22, "%F\n  %T", gmtime( &time ));
     snprintf(
@@ -219,12 +219,15 @@ void Task_display(void *pvParameters) {
  * Running the radio.
  */
 void Task_rockblock(void *pvParameters) {
+  // Give it some time since we suspend task after creation. Not a great
+  // solution but good for now.
+  vTaskDelay( pdMS_TO_TICKS( 100 ) );
   Serial.println("Start radio loop");
   if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
-  for (;;) {
+  while (true) {
     rockblock.loop();
     // to display signal strength
     state.signal = rockblock.getSignalStrength();
@@ -233,28 +236,22 @@ void Task_rockblock(void *pvParameters) {
 }
 
 /*
- * Run GPS. Disable GPS and remove task when we got a fix.
- * TODO: There is a lot of copying values going on.
+ * Run GPS
  */
 void Task_gps(void *pvParameters) {
+  // give it some wait to be suspended after creation
+  vTaskDelay( pdMS_TO_TICKS( 100 ) );
   unsigned int ctr=0;
-  if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+
+  if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
 
-  for(;;) {
-    if (ctr % 30 == 0) { Serial.println("GPS: Waiting for fix."); }
-
+  while(true) {
+    // show every 50 * 100 ms = 5s
+    if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
     gps.loop();
-
-    if (gps.updated) {
-      if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-        gps.disable();
-        xSemaphoreGive(mutex_i2c);
-      }
-      vTaskDelete( gpsTaskHandle );
-    }
     ctr++;
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
@@ -266,7 +263,7 @@ void Task_gps(void *pvParameters) {
  * TODO: remove or use DEBUG flag
  */
 void Task_time(void *pvParameters) {
-  for (;;) {
+  while (true) {
     Serial.print("time: "); Serial.print(getTime());
     Serial.print(", start time: "); Serial.print(state.start_time);
     Serial.print(", uptime: "); Serial.print(getTime() - state.start_time, 0);
@@ -283,24 +280,39 @@ void Task_time(void *pvParameters) {
  */
 void Task_main_loop(void *pvParameters) {
   mainFSM fsm_state = AWAKE;
+  // use as needed
+  char bfr[255] = {0};
   for (;;) {
 
     switch (fsm_state) {
 
       case AWAKE: {
-        // TODO: move some of the preparation from setup here
+        // TODO: move some of the preparation from setup here?
         fsm_state = WAITING_FOR_GPS;
+        vTaskResume(gpsTaskHandle);
         break;
       }
 
       case WAITING_FOR_GPS: {
-        if (gps.updated || getRunTime() > GPS_TIME_OUT) {
-          char bfr[255] = {0};
+        bool time_out_test = getRunTime() > GPS_TIME_OUT;
+        if (gps.updated) {
+          Serial.println("GPS: Fix acquired.");
           update_state_from_gps(state, gps);
-          if (state.start_time == 0) {
-            state.start_time = state.gps_read_time - getTime();
-          }
           setTime( state.gps_read_time );
+        }
+        if (time_out_test) {
+          Serial.println("GPS: Timeout.");
+          // add the current time to the failed GPS message but continue with
+          // power on at 0 time
+          state.gps_read_time = getTime();
+        }
+        if (gps.updated || time_out_test) {
+          // stop GPS task and turn off GPS hardware
+          vTaskDelete(gpsTaskHandle);
+          if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
+            gps.disable();
+            xSemaphoreGive(mutex_i2c);
+          }
           messages.createPK001(bfr, state);
           rockblock.sendMessage(bfr);
           fsm_state = WAITING_FOR_RB;
@@ -309,8 +321,10 @@ void Task_main_loop(void *pvParameters) {
       };
 
       case WAITING_FOR_RB: {
+        // Make sure we don't interrupt a successful message retrieval process
         bool waitForRB = (
           rockblock.state == SENDING || rockblock.state == INCOMING);
+        vTaskResume(rockblockTaskHandle);
         if (rockblock.sendSuccess) { fsm_state = RB_DONE; }
         // gracefully shutdown RB before timoutTask would shut it it down no
         // matter what
@@ -385,7 +399,7 @@ void setup() {
   // ---- set state defaults
   // Reporting times need to be changed via downlink message and will only be
   // persisted until next power off
-  state.interval = DEFAULT_SLEEP_TIME;
+  state.interval = DEFAULT_INTERVAL;
   // ---- Restore state
   storage.restore(state);
   // ----- Init Display
@@ -403,7 +417,7 @@ void setup() {
   Serial.println("\nScout buoy firmware v3.0.0-pre-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
-  Serial.println("\n© The Nature Conservancy 2024\n");
+  Serial.println("\n© The Nature Conservancy 2025\n");
   Serial.print("reporting time: "); Serial.println(state.interval);
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
@@ -436,14 +450,17 @@ void setup() {
    */
   xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, NULL);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
+  // Don't run before system is up
+  vTaskSuspend(gpsTaskHandle);
   xTaskCreate(&Task_rockblock, "Task rockblock", 4096, NULL, 10,
     &rockblockTaskHandle);
+  // Don't run radio until needed
+  vTaskSuspend(rockblockTaskHandle);
   xTaskCreate(&Task_main_loop, "Task main loop", 4096, NULL, 10, NULL);
-  xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10,
-    &timeoutTaskHandle);
+  xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10, NULL);
 #if DEBUG
   // xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
-  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, &displayTaskHandle);
+  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
 #endif
 }
 

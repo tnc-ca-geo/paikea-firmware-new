@@ -61,7 +61,7 @@ ird_rts     1     7    0
 #define BATT_R_LOWER 100 // kOhm. lower R11 of voltage divider
 #define BATT_FUDGE 1.1 // everyone seems to add a fudge factor here
 // constants
-#define DEFAULT_SLEEP_TIME 600
+#define DEFAULT_INTERVAL 600
 #define RETRY_TIME 600
 // time after which system is shutdown no matter what, 5 minutes
 #define TIME_OUT 300
