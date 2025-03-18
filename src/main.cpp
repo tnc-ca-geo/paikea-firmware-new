@@ -21,6 +21,8 @@
 #include <Wire.h>
 #include <math.h>
 // my libraries
+#include "pindefs.h" // contains hardware specs and defined defaults
+// project
 #include <tca95xx.h>
 #include <gps.h>
 #include <display.h>
@@ -29,8 +31,6 @@
 #include <scoutMessages.h>
 #include <storage.h>
 #include <helpers.h>
-// project
-#include "pindefs.h" // contains hardware specs and defined defaults
 
 // debug flags
 #define DEBUG 1
@@ -328,7 +328,7 @@ void Task_main_loop(void *pvParameters) {
         if (rockblock.sendSuccess) { fsm_state = RB_DONE; }
         // gracefully shutdown RB before timoutTask would shut it it down no
         // matter what
-        else if (getRunTime() > TIME_OUT and !waitForRB) {
+        else if (getRunTime() > SYSTEM_TIME_OUT and !waitForRB) {
           Serial.println("TIMEOUT");
           state.retries = state.retries - 1;
           fsm_state = SLEEP_READY;
@@ -371,8 +371,8 @@ void Task_main_loop(void *pvParameters) {
  */
 void Task_timeout(void *pvParameters) {
   for (;;) {
-    if ( getRunTime() > TIME_OUT + 20 ) {
-      Serial.print("HARD TIMEOUT after "); Serial.print(TIME_OUT);
+    if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
+      Serial.print("HARD TIMEOUT after "); Serial.print(SYSTEM_TIME_OUT + 20);
       Serial.println(" seconds.");
       state.retries = state.retries - 1;
       Serial.print("Retries left: "); Serial.println(state.retries);

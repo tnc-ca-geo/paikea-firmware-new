@@ -21,8 +21,6 @@ void testGetSleepDifference() {
     test_state.gps_read_time = 1E9 + 20; // September 9, 2001 1:47:00 AM
     test_state.retries = 3;
     test_state.send_success = true;
-    // make sure constants are set correctly
-    TEST_ASSERT_EQUAL_INT(600, test_state.retry_interval);
     // scenario 1
     // start time: 1:46:40
     // gps read time: 1:47:00

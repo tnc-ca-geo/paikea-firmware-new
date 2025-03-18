@@ -4,16 +4,16 @@
 #ifndef __SCOUT_STATE_TYPES__
 #define __SCOUT_STATE_TYPES__
 
+#ifndef DEFAULT_INTERVAL
+#define DEFAULT_INTERVAL 600
+#endif
+
 
 typedef struct {
     // timing
     time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
     time_t gps_read_time = 0; // time when GPS was read
-    // TODO: remove
-    uint32_t prior_uptime = 0;
-    uint32_t interval = 600; // reporting interval
-    const uint16_t retry_interval = 600; // retry interval
-    const uint16_t timeout = 600; // timeout for runs
+    uint32_t interval = DEFAULT_INTERVAL; // reporting interval
     uint8_t retries = 3; // maximal number of retries
     // TODO: remove
     bool go_to_sleep = 0;
