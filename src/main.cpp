@@ -121,7 +121,7 @@ void goToSleep() {
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
-  snprintf(bfr, 128, SLEEP_TEMPLATE, state.frequency, difference);
+  snprintf(bfr, 128, SLEEP_TEMPLATE, state.interval, difference);
   Serial.print(bfr);
   // give it an extra second
   vTaskDelay( pdMS_TO_TICKS (1000) );
@@ -302,7 +302,7 @@ void Task_main_loop(void *pvParameters) {
           Serial.print("Incoming message: "); Serial.println(bfr);
           if ( messages.parseIncoming(state, bfr) ) {
             Serial.print("New reporting time: ");
-            Serial.println(state.frequency);
+            Serial.println(state.interval);
           }
         }
         fsm_state = SLEEP_READY;
@@ -347,7 +347,7 @@ void setup() {
   // ---- set state defaults
   // Reporting times need to be changed via downlink message and will only be
   // persisted until next power off
-  state.frequency = DEFAULT_SLEEP_TIME;
+  state.interval = DEFAULT_SLEEP_TIME;
   // ---- Restore state
   storage.restore(state);
   // ----- Init Display
@@ -366,7 +366,7 @@ void setup() {
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2024\n");
-  Serial.print("reporting time: "); Serial.println(state.frequency);
+  Serial.print("reporting time: "); Serial.println(state.interval);
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);

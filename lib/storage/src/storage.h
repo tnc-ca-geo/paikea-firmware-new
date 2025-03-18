@@ -9,7 +9,7 @@
 #include <stateType.h>
 
 inline RTC_DATA_ATTR time_t rtc_start = 0;
-inline RTC_DATA_ATTR uint32_t rtc_frequency = 600;
+inline RTC_DATA_ATTR uint32_t rtc_interval = 600;
 inline RTC_DATA_ATTR bool rtc_first_run = true;
 inline RTC_DATA_ATTR uint8_t rtc_retries = 3;
 

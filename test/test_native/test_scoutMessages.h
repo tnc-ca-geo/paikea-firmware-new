@@ -51,38 +51,38 @@ void test_parsePK006() {
     // Correct message format
     strcpy(bfr, "+DATA:PK006,60");
     TEST_ASSERT(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(60, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(60, state.interval);
     // Incmomplete message
     strcpy(bfr, "+DATA");
     TEST_ASSERT_FALSE(messages.parsePK006(state, bfr));
     // Invalid with leading spaces
-    state.frequency = 44;
+    state.interval = 44;
     strcpy(bfr, "   +DATA:PK006,33");
     TEST_ASSERT_FALSE(messages.parsePK006(state, bfr));
     // Don't override value if new input is not valid.
-    TEST_ASSERT_EQUAL_UINT32(44, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(44, state.interval);
     // Non-parsable
-    state.frequency = 44;
+    state.interval = 44;
     strcpy(bfr, "+DATA:PK006,Nonsense");
     TEST_ASSERT_FALSE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(44, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(44, state.interval);
     // test different length
     strcpy(bfr, "+DATA:PK006,7");
     TEST_ASSERT_TRUE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(7, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(7, state.interval);
     strcpy(bfr, "+DATA:PK006,1300");
     TEST_ASSERT_TRUE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(1300, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(1300, state.interval);
     // test fences
     strcpy(bfr, "+DATA:PK006,4");
     TEST_ASSERT_TRUE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(5, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(5, state.interval);
     strcpy(bfr, "+DATA:PK006,40000");
     TEST_ASSERT_TRUE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(1440, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(1440, state.interval);
     // test negative
-    state.frequency = 44;
+    state.interval = 44;
     strcpy(bfr, "+DATA:PK006,-4");
     TEST_ASSERT_FALSE(messages.parsePK006(state, bfr));
-    TEST_ASSERT_EQUAL_UINT32(44, state.frequency);
+    TEST_ASSERT_EQUAL_UINT32(44, state.interval);
 }

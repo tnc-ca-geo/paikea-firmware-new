@@ -6,12 +6,15 @@
 
 
 typedef struct {
-    time_t start_time = 0;
-    time_t gps_read_time = 0;
+    // timing
+    time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
+    time_t gps_read_time = 0; // time when GPS was read
     // TODO: remove
     uint32_t prior_uptime = 0;
-    uint32_t frequency = 600;
-    uint8_t retries = 3;
+    uint32_t interval = 600; // reporting interval
+    const uint16_t retry_interval = 600; // retry interval
+    const uint16_t timeout = 600; // timeout for runs
+    uint8_t retries = 3; // maximal number of retries
     // TODO: remove
     bool go_to_sleep = 0;
     bool gps_done = 0;
@@ -26,10 +29,7 @@ typedef struct {
     float speed=0; // speed in knots
     float bat=0;
     uint8_t signal = 0;
-    // setting timeout to 300 seconds
-    const uint16_t timeout = 600;
-    // setting retry time to 120 seconds
-    const uint16_t retry_time = 600;
+
     char message[255] = {0};
 } systemState;
 

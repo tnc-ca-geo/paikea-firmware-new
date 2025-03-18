@@ -54,8 +54,8 @@ bool ScoutMessages::parseIncoming(systemState &state, char* bfr) {
     try { parsed = std::stoi(bfr+12, nullptr, 10); }
     catch (...) { return false; }
     if (parsed < 0) { return false; }
-    else if (parsed < 2) { state.frequency = 2 * 60; }
-    else if (parsed > 1440 ) { state.frequency = 1440 * 60; }
-    else { state.frequency = parsed  * 60; }
+    else if (parsed < 2) { state.interval = 2 * 60; }
+    else if (parsed > 1440 ) { state.interval = 1440 * 60; }
+    else { state.interval = parsed  * 60; }
     return true;
 }
