@@ -1,5 +1,9 @@
 #include <scoutMessages.h>
 
+#ifndef DEFAULT_INTERVAL
+#define DEFAULT INTERVAL 600
+#endif
+
 /*
  * Take a float value and return NMEA string for lat and long.
  */
@@ -50,13 +54,16 @@ size_t ScoutMessages::createPK001_extended(char* bfr, const systemState state) {
     char latBfr[32] = {0};
     char lonBfr[32] = {0};
     char timeBfr[16] = {0};
+    uint16_t interval = (
+        state.new_interval != 0 ) ? state.new_interval : state.interval;
     float2Nmea(latBfr, state.lat, true);
     float2Nmea(lonBfr, state.lng, false);
     epoch2utc(timeBfr, state.gps_read_time);
     return snprintf(
-        bfr, 128, "PK001;%s,%s,%s,sog:%.3f,cog:%.0f,sta:00,batt:%.2f,int:%d",
+        bfr, 128,
+        "PK001;%s,%s,%s,sog:%.3f,cog:%.0f,sta:00,batt:%.2f,int:%d,st:%d",
         latBfr, lonBfr, timeBfr, state.speed, state.heading, state.bat,
-        (int) state.interval/60);
+        (int) state.interval/60, (int) state.mode);
 }
 
 /*
@@ -78,6 +85,8 @@ bool ScoutMessages::parseIncoming(systemState &state, char* bfr) {
     else { state.new_interval = parsed  * 60; }
     if (state.new_interval != state.interval) {
       state.config_change_requested = true;
+      // using default interval until change success
+      state.interval = DEFAULT_INTERVAL;
     }
     return true;
 }

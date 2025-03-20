@@ -64,6 +64,7 @@ static SemaphoreHandle_t mutex_state;
 // of the task itself.
 static TaskHandle_t rockblockTaskHandle = NULL;
 static TaskHandle_t gpsTaskHandle = NULL;
+static TaskHandle_t blinkTaskHandle = NULL;
 
 /*
  * Hardware and peripheral objects
@@ -72,7 +73,7 @@ HardwareSerial gps_serial(1);
 // Defined in hal.h
 RockblockSerial rockblock_serial = RockblockSerial();
 // Port Expander using i2c
-Expander expander = Expander(Wire);
+Expander expander = Expander(Wire, PORT_EXPANDER_I2C_ADDRESS);
 // GPS using UART
 Gps gps = Gps(expander, gps_serial, PORT_EXPANDER_GPS_ENABLE_PIN);
 // Display using i2c, for development only.
@@ -155,12 +156,12 @@ void goToSleep() {
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
     display.off();
-    // turn Rockblock off
-    rockblock.toggle(false);
     // delete Rockblock task
     vTaskDelete( rockblockTaskHandle );
     // Set port expander to known state, i.e. peripherals off
     expander.init();
+    // turn Rockblock off
+    rockblock.toggle(false);
     xSemaphoreGive(mutex_i2c);
   }
   esp_sleep_enable_timer_wakeup( difference * 1E6 );
@@ -183,15 +184,16 @@ void goToSleep() {
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
+  uint8_t ctr = 0;
   while (true) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
       expander.digitalWrite( LED01, blink_state || state.gps_done );
-      expander.digitalWrite(
-        LED00, state.gps_done && (blink_state || state.rockblock_done ));
+      expander.digitalWrite( LED00, blink_state || state.rockblock_done );
       xSemaphoreGive(mutex_i2c);
     }
-    blink_state = !blink_state;
-    vTaskDelay( pdMS_TO_TICKS( 200 ) );
+    blink_state = !(ctr % 20);
+    ctr++;
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -275,20 +277,35 @@ void Task_time(void *pvParameters) {
  * TODO: Implement timeouts and retries
  */
 void Task_main_loop(void *pvParameters) {
+  // setup
   mainFSM fsm_state = AWAKE;
   // use as needed
   char bfr[255] = {0};
   // use for timed action or output in increaments of 100ms, e.g. while waiting
   // for state change
   uint8_t ctr = 0;
+  // loop
   while (true) {
+
+    // check whether peripherals are powered ON otherwise go to sleep.
+    // This is important in development when the board gets power from USB but
+    // the peripherals won't
+    if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
+      if (!expander.check()) {
+        Serial.println(
+          "\nThe board might be turned OFF. Please turn ON and press RESET.");
+        Serial.println("Going to sleep for now.\n");
+        fsm_state = SLEEP_READY;
+      };
+      xSemaphoreGive(mutex_i2c);
+    }
 
     switch (fsm_state) {
 
       case AWAKE: {
         // TODO: move some of the preparation from setup here?
         fsm_state = WAITING_FOR_GPS;
-        vTaskResume(gpsTaskHandle);
+        vTaskResume( gpsTaskHandle );
         break;
       }
 
@@ -348,6 +365,7 @@ void Task_main_loop(void *pvParameters) {
         if (state.new_interval > 0) {
           Serial.println("Apply new interval");
           state.interval = state.new_interval;
+          state.new_interval = 0;
         }
         state.send_success = true;
         // used only for blink state
@@ -372,14 +390,14 @@ void Task_main_loop(void *pvParameters) {
 
     }
     ctr++;
-    vTaskDelay( pdMS_TO_TICKS( 100 ) );
+    vTaskDelay( 100 );
   }
 }
 
 /*
  * Hard timeout to recover a hangup system. Consider this a gentle watchdog that
- * is able to turn off peripherials. Hopefully this will never timeout, graceful
- * timeout is handled by the main task.
+ * is able to turn off peripherials. Hopefully this will never be triggered,
+ * graceful timeout handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
   while (true) {
@@ -401,6 +419,9 @@ void Task_timeout(void *pvParameters) {
  * Setup
  */
 void setup() {
+  // --- Go slow for power consumption since a 32bit system with 240Mhz is
+  // --- overkill for this system that is mostly waiting around
+  setCpuFrequencyMhz(10);
   // ---- Start Serial for debugging --------------
   Serial.begin(115200);
   // ----- Init both HardwareSerial channels ---------------------
@@ -415,18 +436,12 @@ void setup() {
   state.interval = DEFAULT_INTERVAL;
   // ---- Restore state
   storage.restore(state);
-  // ----- Init Display, even if we don't use it in production we should
-  // properly turn it off.
+  // ---- Init Display: if not used it should be turned be off properly
   display.begin();
   #if not DEBUG
     display.off();
     state.display_off = true;
   #endif
-  // ----- Init Expander and test expander --------
-  expander.begin(PORT_EXPANDER_I2C_ADDRESS);
-  // ----- Init Blink -----------------------------
-  expander.pinMode(10, EXPANDER_OUTPUT);
-  expander.pinMode(7, EXPANDER_OUTPUT);
   // Output some useful message
   Serial.println("\nScout buoy firmware v3.0.0-pre-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
@@ -437,6 +452,11 @@ void setup() {
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);
   Serial.println();
+  // ----- Init IO Expander -----------------------
+  expander.init();
+  // ----- Init Blink -----------------------------
+  expander.pinMode(10, EXPANDER_OUTPUT);
+  expander.pinMode(7, EXPANDER_OUTPUT);
 
   /*
    * FreeRTOS setup
@@ -462,7 +482,7 @@ void setup() {
   /*
    * Create and start simple tasks.
    */
-  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, NULL);
+  xTaskCreate(&Task_blink, "Task blink", 4096, NULL, 3, &blinkTaskHandle);
   xTaskCreate(&Task_gps, "Task gps", 4096, NULL, 12, &gpsTaskHandle);
   // Don't run before system is up
   vTaskSuspend(gpsTaskHandle);
@@ -474,7 +494,7 @@ void setup() {
   xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10, NULL);
 #if DEBUG
   // xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
-  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
+  // xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
 #endif
 }
 

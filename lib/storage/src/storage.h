@@ -14,6 +14,7 @@ inline RTC_DATA_ATTR bool rtc_first_run = true;
 inline RTC_DATA_ATTR unsigned int rtc_retries = 3;
 inline RTC_DATA_ATTR unsigned int rtc_new_interval = 0;
 inline RTC_DATA_ATTR unsigned int rtc_sleep = 0;
+inline RTC_DATA_ATTR stateMode rtc_mode = UNKNOWN;
 
 /*
  * Store or restore some parts of the system state. Some aspects need to be

@@ -5,18 +5,9 @@
 /*
  * Constructor passing a TwoWire instance.
  */
-Expander::Expander(TwoWire& i2c) {
+Expander::Expander(TwoWire& i2c, uint8_t address) {
     this->wire = &i2c;
-}
-
-/*
- * Initialize the Expander
- */
-void Expander::begin(uint8_t i2c_address) {
-    this->address = i2c_address;
-    // Serial.print("ADDRESS ");
-    //Serial.println(i2c_address);
-    this->init();
+    this->address = address;
 }
 
 /*
@@ -50,7 +41,7 @@ uint8_t Expander::read(uint8_t addr) {
     wire->beginTransmission(this->address);
     wire->write(addr);
     wire->endTransmission();
-    wire->requestFrom(this->address, (int) 1);
+    wire->requestFrom(this->address, 1);
     uint8_t value = wire->read();
     wire->endTransmission();
     return value;
@@ -80,9 +71,22 @@ void Expander::init() {
   }
 }
 
+/*
+ * Check whether expander is working (powered ON)
+ */
+bool Expander::check() {
+    this->pinMode(0, 6, EXPANDER_OUTPUT);
+    bool value1 = this->digitalRead(0, 6);
+    this->digitalWrite(0, 6, 1);
+    bool value2 = this->digitalRead(0, 6);
+    this->digitalWrite(0, 6, 0);
+    return value1 != value2;
+}
+
 void Expander::pinMode(uint8_t pin, bool mode) {
     using namespace std;
     uint8_t port, bit;
+    // sdt:tie allows for the assignment of tuples to various vars
     tie(port, bit) = this->get_port_and_bit(pin);
     this->pinMode(port, bit, mode);
 };

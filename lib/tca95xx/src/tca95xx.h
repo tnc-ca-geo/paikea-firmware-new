@@ -12,7 +12,10 @@
 #define EXPANDER_OUTPUT 0
 #define EXPANDER_INPUT 1
 
-
+/*
+ * The default state of the port expander when powered. IO pins 1 and 13 are
+ * set as output to disable ROCKBLOCK and GPS during sleep
+ */
 const uint8_t TCA95_DEFAULTS[8] = {
   0b00000000,  // Input register level port 0 (read only)
   0b00000000,  // Input register level port 1 (read only)
@@ -20,8 +23,8 @@ const uint8_t TCA95_DEFAULTS[8] = {
   0b00000000,  // Output register level port 1
   0b00000000,  // Pin polarity port 0
   0b00000000,  // Pin polarity port 1
-  0b11111111,  // IO direction 1 ... input, 0 ... output port 0
-  0b11111111   // IO direction 1 ... input, 0 ... output port 1
+  0b01111111,  // IO direction 1 ... input, 0 ... output port 0
+  0b11110111   // IO direction 1 ... input, 0 ... output port 1
 };
 
 // This seems to be a good way to test whether we have power on the bus
@@ -32,8 +35,8 @@ class AbstractExpander {
 
 public:
     AbstractExpander() {};
-    virtual void begin(uint8_t i2c_address) = 0;
     virtual void init() = 0;
+    virtual bool check();
     virtual void pinMode(uint8_t pin, bool mode) = 0;
     virtual void pinMode(uint8_t port, uint8_t bit, bool mode) = 0;
     virtual void digitalWrite(uint8_t pin, bool value) = 0;
@@ -58,11 +61,11 @@ private:
     TwoWire* wire;
 
 public:
-    Expander(TwoWire& i2c);
-    // configure Expander with an I2C address
-    void begin(uint8_t i2c_address);
+    Expander(TwoWire& i2c, uint8_t address);
     // Set default values
     void init();
+    // Make sure expander works by setting and unsetting a bit
+    bool check();
     // overload methods to be compatible with Arduino's pinMode, digitalWrite,
     // digitalRead
     void pinMode(uint8_t pin, bool mode);

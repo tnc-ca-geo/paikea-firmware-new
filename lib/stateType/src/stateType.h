@@ -8,6 +8,7 @@
 #define DEFAULT_INTERVAL 600
 #endif
 
+enum stateMode { UNKNOWN, FIRST, NORMAL, TRANSITION };
 
 typedef struct {
     // timing
@@ -15,6 +16,7 @@ typedef struct {
     time_t gps_read_time = 0; // time when GPS was read
     uint16_t interval = DEFAULT_INTERVAL; // reporting interval
     uint8_t retries = 3; // maximal number of retries
+    stateMode mode = UNKNOWN;
     // state
     bool gps_done = 0;
     bool message_sent = 0;

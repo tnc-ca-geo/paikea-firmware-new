@@ -34,11 +34,11 @@ function    port  bit  config (input or output)
 
 gps_enb     0     0    0
 xl_enb      0     1    0
-gps_extint  0     2    1
+gps_extint  0     2    1    // What does this do?
 button0     0     3    1
 button1     0     4    1
 button2     0     5    1
-unused      0     6    0
+unused      0     6    0    // Used for bus check
 led0        0     7    0
 led1        1     0    0
 led2        1     1    0
