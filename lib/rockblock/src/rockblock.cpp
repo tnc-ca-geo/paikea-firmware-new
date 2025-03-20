@@ -172,7 +172,7 @@ void FrameParser::parse(const char* frame) {
  * reference.
  */
 Rockblock::Rockblock(AbstractExpander &expander,
-    AbstractSerial &serial, int enable_pin
+    AbstractSerial &serial, uint8_t enable_pin
 ) {
     this->expander = &expander;
     this->serial = &serial;
@@ -218,7 +218,7 @@ void Rockblock::getLastIncoming(char *bfr, size_t len) {
 /*
  * Public getter for signal strength
  */
-int Rockblock::getSignalStrength() {
+uint8_t Rockblock::getSignalStrength() {
     return this->signal;
 }
 

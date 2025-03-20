@@ -23,7 +23,8 @@ class ScoutMessages {
         static size_t float2Nmea(char* bfr, float val, bool latFlag=true);
 
     public:
-        static size_t createPK001(char* bfr, systemState &state);
+        static size_t createPK001(char* bfr, const systemState state);
+        static size_t createPK001_extended(char* bfr, const systemState state);
         bool parseIncoming(systemState &state, char* bfr);
 
 };

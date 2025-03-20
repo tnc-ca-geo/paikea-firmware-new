@@ -129,7 +129,7 @@ float readBatteryVoltage() {
  * Rather simple for now, might become a more complex function for state
  * transition.
  */
-void update_state_from_gps(systemState &state, Gps gps) {
+void update_state_from_gps(systemState &state, Gps gps, time_t tme) {
   state.lat = gps.lat;
   state.lng = gps.lng;
   state.heading = gps.heading;
@@ -137,7 +137,7 @@ void update_state_from_gps(systemState &state, Gps gps) {
   state.gps_done = true;
   state.gps_read_time = gps.get_corrected_epoch();
   if (state.start_time == 0) {
-    state.start_time = state.gps_read_time - getTime();
+    state.start_time = gps.get_corrected_epoch() - tme;
   }
 }
 
@@ -146,19 +146,18 @@ void update_state_from_gps(systemState &state, Gps gps) {
  */
 void goToSleep() {
   char bfr[128] = {0};
-  int difference = getSleepDifference( state, getTime() );
+  uint16_t difference = getSleepDifference( state, getTime() );
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
   snprintf(bfr, 128, SLEEP_TEMPLATE, state.interval, difference);
   Serial.print(bfr);
-  // give it an extra second
-  vTaskDelay( pdMS_TO_TICKS (1000) );
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
     display.off();
-    // remove Rockblock task
+    // turn Rockblock off
     rockblock.toggle(false);
+    // delete Rockblock task
     vTaskDelete( rockblockTaskHandle );
     // Set port expander to known state, i.e. peripherals off
     expander.init();
@@ -242,7 +241,6 @@ void Task_rockblock(void *pvParameters) {
 void Task_gps(void *pvParameters) {
   // give it some wait to be suspended after creation
   vTaskDelay( pdMS_TO_TICKS( 100 ) );
-  unsigned int ctr=0;
 
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     gps.enable();
@@ -282,7 +280,7 @@ void Task_main_loop(void *pvParameters) {
   char bfr[255] = {0};
   // use for timed action or output in increaments of 100ms, e.g. while waiting
   // for state change
-  unsigned int ctr = 0;
+  uint8_t ctr = 0;
   while (true) {
 
     switch (fsm_state) {
@@ -297,8 +295,10 @@ void Task_main_loop(void *pvParameters) {
       case WAITING_FOR_GPS: {
         bool time_out_test = getRunTime() > GPS_TIME_OUT;
         if (gps.updated) {
-          setTime( state.gps_read_time );
-          update_state_from_gps(state, gps);
+          // order matters here because we need the old time to determine
+          // start time
+          update_state_from_gps(state, gps, getTime());
+          setTime( gps.get_corrected_epoch() );
           snprintf(bfr, 255, GPS_MESSAGE_TEMPLATE, state.lat, state.lng,
             getRunTime());
           Serial.println(bfr);
@@ -307,7 +307,7 @@ void Task_main_loop(void *pvParameters) {
           Serial.println("GPS: Timeout.");
           // add the current time to the failed GPS message but continue with
           // power on at 0 time
-          state.gps_read_time = getTime();
+          // state.gps_read_time = getTime();
         }
         if (gps.updated || time_out_test) {
           // stop GPS task and turn off GPS hardware
@@ -316,7 +316,7 @@ void Task_main_loop(void *pvParameters) {
             gps.disable();
             xSemaphoreGive(mutex_i2c);
           }
-          messages.createPK001(bfr, state);
+          messages.createPK001_extended(bfr, state);
           rockblock.sendMessage(bfr);
           fsm_state = WAITING_FOR_RB;
         }
@@ -342,8 +342,13 @@ void Task_main_loop(void *pvParameters) {
       };
 
       case RB_DONE: {
-        char bfr[255] = {0};
+        // Success is the only way to get here, now apply the new confirmed
+        // interval or sleep.
         Serial.println("SUCCESS");
+        if (state.new_interval > 0) {
+          Serial.println("Apply new interval");
+          state.interval = state.new_interval;
+        }
         state.send_success = true;
         // used only for blink state
         state.rockblock_done = true;
@@ -352,8 +357,8 @@ void Task_main_loop(void *pvParameters) {
         if (bfr[0] != '\0') {
           Serial.print("Incoming message: "); Serial.println(bfr);
           if ( messages.parseIncoming(state, bfr) ) {
-            Serial.print("New reporting time: ");
-            Serial.println(state.interval);
+            Serial.print("Requested reporting time: ");
+            Serial.println(state.new_interval);
           }
         }
         fsm_state = SLEEP_READY;

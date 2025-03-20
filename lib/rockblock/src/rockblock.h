@@ -13,7 +13,7 @@
 
 // TODO: Determine actual maximum sizes, there is plenty of memory, we can be
 // generous for now.
-#define MAX_COMMAND_SIZE 64
+#define MAX_COMMAND_SIZE 256
 #define MAX_RESPONSE_SIZE 64
 // This number is from the Rockblock documentation
 #define MAX_MESSAGE_SIZE 340
@@ -48,13 +48,13 @@ class Rockblock {
     private:
         AbstractSerial* serial;
         AbstractExpander* expander;
-        int enable_pin;
+        uint8_t enable_pin;
         FrameParser parser = FrameParser();
         char message[MAX_MESSAGE_SIZE] = {0};
         char incoming[MAX_MESSAGE_SIZE] = {0};
         time_t start_time;
-        int retries = 3;
-        int signal = 0;
+        uint8_t retries = 3;
+        uint8_t signal = 0;
         // buffer for unhandled serial data
         char stream[1024] = {0};
         bool on = false;
@@ -66,12 +66,12 @@ class Rockblock {
 
     public:
         Rockblock(AbstractExpander &expander, AbstractSerial &serial,
-            int enable_pin);
+            uint8_t enable_pin);
         StateMachine state = OFFLINE;
         bool sendSuccess = false;
         void sendMessage(char *buffer, size_t len=255);
         void getLastIncoming(char *buffer, size_t len=MAX_MESSAGE_SIZE);
-        int getSignalStrength();
+        uint8_t getSignalStrength();
         void toggle(bool on=false);
         // process loop
         void loop();

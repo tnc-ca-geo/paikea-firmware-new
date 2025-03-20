@@ -27,7 +27,7 @@ size_t ScoutMessages::epoch2utc(char* bfr, time_t val) {
  *
  * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44
  */
-size_t ScoutMessages::createPK001(char* bfr, systemState &state) {
+size_t ScoutMessages::createPK001(char* bfr, const systemState state) {
     // wasting some memory here
     char latBfr[32] = {0};
     char lonBfr[32] = {0};
@@ -38,6 +38,25 @@ size_t ScoutMessages::createPK001(char* bfr, systemState &state) {
     return snprintf(
         bfr, 128, "PK001;%s,%s,%s,sog:%.3f,cog:%.0f,sta:00,batt:%.2f",
         latBfr, lonBfr, timeBfr, state.speed, state.heading, state.bat);
+}
+
+/*
+ * Create an extended PK001 message
+ *
+ * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:5
+ */
+size_t ScoutMessages::createPK001_extended(char* bfr, const systemState state) {
+    // wasting some memory here
+    char latBfr[32] = {0};
+    char lonBfr[32] = {0};
+    char timeBfr[16] = {0};
+    float2Nmea(latBfr, state.lat, true);
+    float2Nmea(lonBfr, state.lng, false);
+    epoch2utc(timeBfr, state.gps_read_time);
+    return snprintf(
+        bfr, 128, "PK001;%s,%s,%s,sog:%.3f,cog:%.0f,sta:00,batt:%.2f,int:%d",
+        latBfr, lonBfr, timeBfr, state.speed, state.heading, state.bat,
+        (int) state.interval/60);
 }
 
 /*
@@ -54,8 +73,11 @@ bool ScoutMessages::parseIncoming(systemState &state, char* bfr) {
     try { parsed = std::stoi(bfr+12, nullptr, 10); }
     catch (...) { return false; }
     if (parsed < 0) { return false; }
-    else if (parsed < 2) { state.interval = 2 * 60; }
-    else if (parsed > 1440 ) { state.interval = 1440 * 60; }
-    else { state.interval = parsed  * 60; }
+    else if (parsed < 2) { state.new_interval = 2 * 60; }
+    else if (parsed > 1440 ) { state.new_interval = 1440 * 60; }
+    else { state.new_interval = parsed  * 60; }
+    if (state.new_interval != state.interval) {
+      state.config_change_requested = true;
+    }
     return true;
 }

@@ -13,14 +13,11 @@ typedef struct {
     // timing
     time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
     time_t gps_read_time = 0; // time when GPS was read
-    uint32_t interval = DEFAULT_INTERVAL; // reporting interval
+    uint16_t interval = DEFAULT_INTERVAL; // reporting interval
     uint8_t retries = 3; // maximal number of retries
-    // TODO: remove
-    bool go_to_sleep = 0;
+    // state
     bool gps_done = 0;
     bool message_sent = 0;
-    // make sure that is true otherwise application will hang in production mode
-    // bool display_off = true;
     bool rockblock_done = 0;
     bool send_success = false;
     float lat=999;
@@ -29,7 +26,15 @@ typedef struct {
     float speed=0; // speed in knots
     float bat=0;
     uint8_t signal = 0;
+    // message
     char message[255] = {0};
+    // requested configuration change
+    uint16_t new_interval = 0;
+    // There is actually no preset sleep (would always be 0) but I still mark
+    // it as new because it belongs in the same category of presets that have
+    // to be stored while sleeping.
+    uint16_t new_sleep = 0;
+    bool config_change_requested = false;
 } systemState;
 
 #endif

@@ -10,10 +10,12 @@ void ScoutStorage::restore(systemState &state) {
         preferences.begin("scout", false);
         preferences.end();
     } else {
-        // restore all the other variables, there are non during the first run
+        // restore other variables, there are non during the first run
         state.start_time = rtc_start;
         state.interval = rtc_interval;
+        state.new_interval = rtc_new_interval;
         state.retries = rtc_retries;
+        state.new_sleep = rtc_sleep;
     }
 }
 
@@ -23,6 +25,8 @@ void ScoutStorage::store(systemState &state) {
     rtc_first_run = false;
     rtc_start = state.start_time;
     rtc_interval = state.interval;
+    rtc_new_interval = state.new_interval;
+    rtc_sleep = state.new_sleep;
     rtc_retries = state.retries;
     // store variables that should persisted even after power down
     preferences.begin("scout", false);
