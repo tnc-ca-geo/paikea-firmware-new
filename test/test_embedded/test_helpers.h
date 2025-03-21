@@ -4,6 +4,7 @@
 #include "stateType.h"
 #include "helpers.h"
 
+using namespace helpers;
 
 void testGetNextWakeupTime() {
     // test 10 min interval
@@ -72,3 +73,43 @@ void testGetSleepDifference() {
     test_state.send_success = false;
     TEST_ASSERT_EQUAL_INT(120, getSleepDifference(test_state, 1E9 + 80));
 };
+
+
+void testUpdateStatefromRbMessage() {
+    char bfr[255] = {};
+    systemState test_state;
+    test_state.mode = FIRST;
+    // scenario 1, simple success without message, first run
+    TEST_ASSERT_EQUAL_INT(false, test_state.send_success);
+    update_state_from_rb_msg(test_state, bfr);
+    TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
+    TEST_ASSERT_EQUAL_INT(600, test_state.interval);
+    TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
+    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
+    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
+    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
+    // scenario 2, simple success without message, second run
+    test_state.send_success = false;
+    test_state.rockblock_done = false;
+    test_state.retries = 1;
+    update_state_from_rb_msg(test_state, bfr);
+    TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
+    TEST_ASSERT_EQUAL_INT(600, test_state.interval);
+    TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
+    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
+    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
+    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
+    // scenario 3, success with interval messsage
+    test_state.send_success = false;
+    test_state.rockblock_done = false;
+    test_state.retries = 1;
+    test_state.interval = 3600;
+    strncpy(bfr, "+DATA:PK006,30;\r\n", 32);
+    update_state_from_rb_msg(test_state, bfr);
+    TEST_ASSERT_EQUAL_INT((int) TRANSITION, test_state.mode);
+    TEST_ASSERT_EQUAL_INT(600, test_state.interval);
+    TEST_ASSERT_EQUAL_INT(1800, test_state.new_interval);
+    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
+    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
+    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
+}

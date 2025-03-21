@@ -1,9 +1,11 @@
 /*
- * Small helpers removed from main for testing
+ * Small helpers removed from main for side effect free testing
  */
 
 #include <Arduino.h>
 #include <stateType.h>
+#include <scoutMessages.h>
+#include <gps.h>
 
 #ifndef MINIMUM_SLEEP
 #define MINIMUM_SLEEP 5
@@ -15,60 +17,17 @@
 #define RETRY_INTERVAL 600
 #endif
 
-/*
- * Calculate wake up time, pegging it to a time raster starting at the full
- * hour.
- */
-time_t getNextWakeupTime(time_t now, unsigned int delay) {
-    time_t full_day = int(now/86400) * 86400;
-    uint16_t cycles = int(now % 86400/delay);
-    return full_day + (cycles + 1) * delay;
-}
-
-void printTime(const time_t time) {
-  char bfr[32] = {0};
-  strftime(bfr, 32, "%T", gmtime(&time));
-  Serial.print(bfr);
-}
-
-/*
-* Get sleep time in seconds from state
-* TODO: Remove side effects
-*/
-uint32_t getSleepDifference(systemState &state, time_t now) {
-  // We are counting from the last GPS read time since we might miss the
-  // the wakeUp time while trying to send. Use the start time if we don't
-  // get a fix.
-  time_t reference = (
-    state.gps_read_time != 0) ? state.gps_read_time : state.start_time;
-  time_t wakeUp = getNextWakeupTime(reference, state.interval);
-  time_t retryWakeup = getNextWakeupTime(reference, RETRY_INTERVAL);
-  // If we have retries left and we haven't sent the message, we should try
-  if (!state.send_success && state.retries > 0) {
-    if (retryWakeup < wakeUp) { wakeUp = retryWakeup; }
-    else { state.retries = 3; }
-  }
-  // We sill have to calculate from now, this could be potentially negative
-  // and will be corrected below
-  int32_t difference = wakeUp - now;
-
-  Serial.print("interval: "); Serial.println(state.interval);
-  Serial.print("retry time: "); Serial.println(RETRY_INTERVAL);
-  Serial.print("start time: " ); printTime(state.start_time);
-  Serial.print("\nreference time (gps): "); printTime( state.gps_read_time );
-  Serial.print("\nnow: "); printTime(now);
-  Serial.print("\nwakeup time: "); printTime(wakeUp);
-  Serial.print("\ndifference: "); Serial.println((int) difference);
-  Serial.print("retries left: "); Serial.println(state.retries);
-  Serial.println();
-
-  // set minimum sleep time, to ensure we wake up
-  difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
-  // Sleep time is 3 days maximum
-  difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP: difference;
-  // Minimum sleep if change requested
-  if (state.config_change_requested) {
-    difference = MINIMUM_SLEEP;
-  }
-  return difference;
+namespace helpers {
+  // Calculate wake up time, pegging it to actual time starting at 00:00:00.
+  time_t getNextWakeupTime(time_t now, unsigned int delay);
+  // Print epoch as time.
+  void printTime(const time_t time);
+  // Get sleep time and retries from state
+  uint32_t getSleepDifference(systemState &state, const time_t now);
+  // Update state from incoming message
+  mainFSM update_state_from_rb_msg(
+    systemState &state, char *bfr, time_t runtime, bool success, bool busy);
+  // Update state from GPS
+  mainFSM update_state_from_gps(
+    systemState &state, Gps &gps, time_t time, bool timeout);
 }

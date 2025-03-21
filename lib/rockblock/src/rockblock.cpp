@@ -284,8 +284,6 @@ void Rockblock::run() {
 
     // some debug output
     if (frame[0] != 0) {
-        // Serial.println("FRAME");
-        // Serial.println(frame);
         Serial.print("\nLast command: "); Serial.println(this->parser.command);
         Serial.print("Last response: "); Serial.println(this->parser.response);
         Serial.print("Status: ");
@@ -356,10 +354,10 @@ void Rockblock::run() {
                 if (this->parser.values[0] < 5) {
                     this->queued = false;
                     // Success output
-                    snprintf(bfr, 255, RB_SUCCESS_TEMPLATE,
+                    /* snprintf(bfr, 255, RB_SUCCESS_TEMPLATE,
                         esp_timer_get_time() / 1E6 - this->start_time,
                         this->retries, this->signal);
-                    Serial.print(bfr);
+                    Serial.print(bfr); */
                     // check for incoming message
                     if (this->parser.values[2] == 1) {
                         Serial.println("Message waiting");

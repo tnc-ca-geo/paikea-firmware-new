@@ -16,17 +16,12 @@
 #include <stateType.h>
 
 
-class ScoutMessages {
-
-    private:
-        static size_t epoch2utc(char* bfr, time_t val);
-        static size_t float2Nmea(char* bfr, float val, bool latFlag=true);
-
-    public:
-        static size_t createPK001(char* bfr, const systemState state);
-        static size_t createPK001_extended(char* bfr, const systemState state);
-        bool parseIncoming(systemState &state, char* bfr);
-
+namespace scoutMessages {
+    size_t epoch2utc(char* bfr, time_t val);
+    size_t float2Nmea(char* bfr, float val, bool latFlag=true);
+    size_t createPK001(char* bfr, const systemState state);
+    size_t createPK001_extended(char* bfr, const systemState state);
+    bool parseIncoming(systemState &state, char* bfr);
 };
 
 #endif

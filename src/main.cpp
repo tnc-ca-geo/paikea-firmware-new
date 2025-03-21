@@ -42,17 +42,6 @@
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
 
 /*
- * Define states for Main FSM
- */
-enum mainFSM {
-  AWAKE,
-  WAITING_FOR_GPS,
-  WAITING_FOR_RB,
-  RB_DONE,
-  SLEEP_READY
-};
-
-/*
  * FreeRTOS setup
  */
 // Use to protect I2C shared between display and expander.
@@ -85,8 +74,7 @@ Rockblock rockblock = Rockblock(
 systemState state;
 // Storage
 ScoutStorage storage = ScoutStorage();
-// Messages
-ScoutMessages messages;
+
 
 /*
  * Read RTC system time and return UNIX epoch.
@@ -127,27 +115,11 @@ float readBatteryVoltage() {
 }
 
 /*
- * Rather simple for now, might become a more complex function for state
- * transition.
- */
-void update_state_from_gps(systemState &state, Gps gps, time_t tme) {
-  state.lat = gps.lat;
-  state.lng = gps.lng;
-  state.heading = gps.heading;
-  state.speed = gps.speed;
-  state.gps_done = true;
-  state.gps_read_time = gps.get_corrected_epoch();
-  if (state.start_time == 0) {
-    state.start_time = gps.get_corrected_epoch() - tme;
-  }
-}
-
-/*
  * Go to sleep
  */
 void goToSleep() {
   char bfr[128] = {0};
-  uint16_t difference = getSleepDifference( state, getTime() );
+  uint16_t difference = helpers::getSleepDifference( state, getTime() );
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
@@ -221,19 +193,16 @@ void Task_display(void *pvParameters) {
  * Running the radio.
  */
 void Task_rockblock(void *pvParameters) {
-  // Give it some time since we suspend task after creation. Not a great
-  // solution but good for now.
+  // Give time to suspended task after creation
   vTaskDelay( pdMS_TO_TICKS( 100 ) );
   Serial.println("Start radio loop");
-  if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
+  if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
   while (true) {
     rockblock.loop();
-    // to display signal strength
-    state.signal = rockblock.getSignalStrength();
-    vTaskDelay( pdMS_TO_TICKS( 50 ) );
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -241,19 +210,16 @@ void Task_rockblock(void *pvParameters) {
  * Run GPS
  */
 void Task_gps(void *pvParameters) {
-  // give it some wait to be suspended after creation
+  // Give time to suspended task after creation
   vTaskDelay( pdMS_TO_TICKS( 100 ) );
-
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
-
   while(true) {
     gps.loop();
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
-
 }
 
 /*
@@ -284,12 +250,11 @@ void Task_main_loop(void *pvParameters) {
   // use for timed action or output in increaments of 100ms, e.g. while waiting
   // for state change
   uint8_t ctr = 0;
+
   // loop
   while (true) {
 
-    // check whether peripherals are powered ON otherwise go to sleep.
-    // This is important in development when the board gets power from USB but
-    // the peripherals won't
+    // Go to sleep if peripherials are not powered
     if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
       if (!expander.check()) {
         Serial.println(
@@ -303,83 +268,57 @@ void Task_main_loop(void *pvParameters) {
     switch (fsm_state) {
 
       case AWAKE: {
-        // TODO: move some of the preparation from setup here?
-        fsm_state = WAITING_FOR_GPS;
         vTaskResume( gpsTaskHandle );
+        fsm_state = WAIT_FOR_GPS;
         break;
       }
 
-      case WAITING_FOR_GPS: {
-        bool time_out_test = getRunTime() > GPS_TIME_OUT;
+      case WAIT_FOR_GPS: {
+        bool timeout_test = getRunTime() > GPS_TIME_OUT;
+        // update state
+        fsm_state = helpers::update_state_from_gps(
+          state, gps, getTime(), timeout_test);
+        // set reat time clock and some output
         if (gps.updated) {
-          // order matters here because we need the old time to determine
-          // start time
-          update_state_from_gps(state, gps, getTime());
           setTime( gps.get_corrected_epoch() );
           snprintf(bfr, 255, GPS_MESSAGE_TEMPLATE, state.lat, state.lng,
             getRunTime());
           Serial.println(bfr);
-        }
-        if (time_out_test) {
-          Serial.println("GPS: Timeout.");
-          // add the current time to the failed GPS message but continue with
-          // power on at 0 time
-          // state.gps_read_time = getTime();
-        }
-        if (gps.updated || time_out_test) {
-          // stop GPS task and turn off GPS hardware
+        } else if (timeout_test) { Serial.println( "GPS: Timeout." );
+        } else if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
+
+        // State transitions affecting hardware and queue message
+        if (fsm_state == WAIT_FOR_RB) {
+          // stop GPS
           vTaskDelete(gpsTaskHandle);
+          // start Rockblock
+          vTaskResume(rockblockTaskHandle);
+          // turn off GPS hardware
           if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
             gps.disable();
             xSemaphoreGive(mutex_i2c);
           }
-          messages.createPK001_extended(bfr, state);
+          // send message and update FSM
+          scoutMessages::createPK001_extended(bfr, state);
           rockblock.sendMessage(bfr);
-          fsm_state = WAITING_FOR_RB;
-        }
-        // show every 50 * 100 ms = 5s
-        if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
-        break;
-      };
-
-      case WAITING_FOR_RB: {
-        // Make sure we don't interrupt a successful message retrieval process
-        bool waitForRB = (
-          rockblock.state == SENDING || rockblock.state == INCOMING);
-        vTaskResume(rockblockTaskHandle);
-        if (rockblock.sendSuccess) { fsm_state = RB_DONE; }
-        // gracefully shutdown RB before timoutTask would shut it it down no
-        // matter what
-        else if (getRunTime() > SYSTEM_TIME_OUT and !waitForRB) {
-          Serial.println("TIMEOUT");
-          state.retries = state.retries - 1;
-          fsm_state = SLEEP_READY;
         }
         break;
       };
 
-      case RB_DONE: {
-        // Success is the only way to get here, now apply the new confirmed
-        // interval or sleep.
-        Serial.println("SUCCESS");
-        if (state.new_interval > 0) {
-          Serial.println("Apply new interval");
-          state.interval = state.new_interval;
-          state.new_interval = 0;
-        }
-        state.send_success = true;
-        // used only for blink state
-        state.rockblock_done = true;
-        state.retries = 3;
+      case WAIT_FOR_RB: {
+        // parse incoming message buffer
         rockblock.getLastIncoming(bfr);
-        if (bfr[0] != '\0') {
-          Serial.print("Incoming message: "); Serial.println(bfr);
-          if ( messages.parseIncoming(state, bfr) ) {
-            Serial.print("Requested reporting time: ");
-            Serial.println(state.new_interval);
+        // Determine next state, systemState will be updated as side effect
+        fsm_state = helpers::update_state_from_rb_msg(
+          state, bfr, getRunTime(), rockblock.sendSuccess,
+          rockblock.state == SENDING || rockblock.state == INCOMING);
+        // some output
+        if (rockblock.sendSuccess) {
+          Serial.println("RB: Send Success");
+          if (bfr[0] !='\0') {
+            Serial.print("RB: Incoming: "); Serial.println(bfr);
           }
-        }
-        fsm_state = SLEEP_READY;
+        } else if (fsm_state == SLEEP_READY) { Serial.println("RB: Timeout"); }
         break;
       };
 
@@ -401,6 +340,8 @@ void Task_main_loop(void *pvParameters) {
  */
 void Task_timeout(void *pvParameters) {
   while (true) {
+    // Give it an extra 20 seconds in hope we catch this gracefully before
+    // shutdown
     if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
       char bfr[64] = {0};
       state.retries = state.retries - 1;
@@ -436,12 +377,10 @@ void setup() {
   state.interval = DEFAULT_INTERVAL;
   // ---- Restore state
   storage.restore(state);
-  // ---- Init Display: if not used it should be turned be off properly
+  // ---- Init Display: if not used it should be turned be off properly, it
+  // ---- might have random content on power on
   display.begin();
-  #if not DEBUG
-    display.off();
-    state.display_off = true;
-  #endif
+  display.off();
   // Output some useful message
   Serial.println("\nScout buoy firmware v3.0.0-pre-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");

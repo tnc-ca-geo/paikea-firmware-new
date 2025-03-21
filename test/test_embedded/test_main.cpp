@@ -22,6 +22,7 @@ int runUnityTests() {
     // test helpers
     RUN_TEST(testGetNextWakeupTime);
     RUN_TEST(testGetSleepDifference);
+    RUN_TEST(testUpdateStatefromRbMessage);
     return UNITY_END();
 }
 

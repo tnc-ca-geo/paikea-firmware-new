@@ -12,7 +12,6 @@ void ScoutStorage::restore(systemState &state) {
         state.mode = FIRST;
     } else {
         // restore other variables, there are non during the first run
-        state.mode = NORMAL;
         state.start_time = rtc_start;
         state.interval = rtc_interval;
         state.new_interval = rtc_new_interval;
