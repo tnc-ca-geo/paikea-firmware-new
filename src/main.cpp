@@ -38,8 +38,16 @@
 #define USE_DISPLAY 1
 
 // printf templates
-#define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
+#define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds \
+  \n - difference: %ds\n - message type: %s\n"
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
+
+// would be better in the stateType lib but for some reason there is a weird
+// conflict
+std::map<messageType, String> scoutMessageTypeLabels = {
+  {UNKNOWN, "UNKNOWN"}, {FIRST, "FIRST"}, {NORMAL, "NORMAL"},
+  {CONFIG, "CONFIG"}, {RETRY, "RETRY"}
+};
 
 /*
  * FreeRTOS setup
@@ -123,14 +131,17 @@ void goToSleep() {
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
-  snprintf(bfr, 128, SLEEP_TEMPLATE, state.interval, difference);
+  snprintf(
+    bfr, 128, SLEEP_TEMPLATE, state.interval, difference,
+    scoutMessageTypeLabels[state.mode]);
   Serial.print(bfr);
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
     display.off();
     // delete Rockblock task
     vTaskDelete( rockblockTaskHandle );
-    // Set port expander to known state, i.e. peripherals off
+    // Set port expander to known state, i.e. peripherals off, holding RB
+    // enable pin HIGH.
     expander.init();
     // turn Rockblock off
     rockblock.toggle(false);

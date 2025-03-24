@@ -2,6 +2,9 @@
  * Small helpers removed from main for side effect free testing
  */
 
+#ifndef __HELPERS_H__
+#define __HELPERS_H__
+
 #include <Arduino.h>
 #include <stateType.h>
 #include <scoutMessages.h>
@@ -31,3 +34,5 @@ namespace helpers {
   mainFSM update_state_from_gps(
     systemState &state, Gps &gps, time_t time, bool timeout);
 }
+
+#endif

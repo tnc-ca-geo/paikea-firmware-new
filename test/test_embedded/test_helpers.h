@@ -22,6 +22,7 @@ void testGetSleepDifference() {
     test_state.gps_read_time = 1E9 + 20; // September 9, 2001 1:47:00 AM
     test_state.retries = 3;
     test_state.send_success = true;
+    test_state.mode = NORMAL;
     // scenario 1
     // start time: 1:46:40
     // gps read time: 1:47:00
@@ -70,46 +71,51 @@ void testGetSleepDifference() {
     // interval: 1800
     // next wakeup time: 2:00:00
     // retry time: 1:50:00
-    test_state.send_success = false;
+    test_state.mode = RETRY;
     TEST_ASSERT_EQUAL_INT(120, getSleepDifference(test_state, 1E9 + 80));
 };
 
 
 void testUpdateStatefromRbMessage() {
-    char bfr[255] = {};
+    char bfr[255] = {0};
     systemState test_state;
     test_state.mode = FIRST;
-    // scenario 1, simple success without message, first run
-    TEST_ASSERT_EQUAL_INT(false, test_state.send_success);
-    update_state_from_rb_msg(test_state, bfr);
+    test_state.gps_done = true;
+
+    // scenario 1, waiting for send success
+    TEST_ASSERT_EQUAL_INT((int) WAIT_FOR_RB,
+        update_state_from_rb_msg(test_state, bfr, 0, false, false));
+
+    // scenario 2, still busy
+    TEST_ASSERT_EQUAL_INT((int) WAIT_FOR_RB,
+        update_state_from_rb_msg(test_state, bfr, 0, false, true));
+
+        // scenario 3, simple success without message
+    TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
+        update_state_from_rb_msg(test_state, bfr, 0, true, false));
     TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
-    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
     TEST_ASSERT_EQUAL_INT(3, test_state.retries);
-    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
-    // scenario 2, simple success without message, second run
-    test_state.send_success = false;
-    test_state.rockblock_done = false;
+
+    // scenario 4, simple success without message, second run, success should
+    // reset retries
     test_state.retries = 1;
-    update_state_from_rb_msg(test_state, bfr);
+    TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
+        update_state_from_rb_msg(test_state, bfr, 0, true, false));
     TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
-    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
     TEST_ASSERT_EQUAL_INT(3, test_state.retries);
-    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
-    // scenario 3, success with interval messsage
-    test_state.send_success = false;
-    test_state.rockblock_done = false;
+
+    // scenario 5, success with interval messsage
     test_state.retries = 1;
     test_state.interval = 3600;
     strncpy(bfr, "+DATA:PK006,30;\r\n", 32);
-    update_state_from_rb_msg(test_state, bfr);
-    TEST_ASSERT_EQUAL_INT((int) TRANSITION, test_state.mode);
+    TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
+        update_state_from_rb_msg(test_state, bfr, 0, true, false));
+    TEST_ASSERT_EQUAL_INT((int) CONFIG, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(1800, test_state.new_interval);
-    TEST_ASSERT_EQUAL_INT(1, test_state.send_success);
     TEST_ASSERT_EQUAL_INT(3, test_state.retries);
-    TEST_ASSERT_EQUAL_INT(1, test_state.rockblock_done);
 }

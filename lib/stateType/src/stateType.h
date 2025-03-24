@@ -1,23 +1,27 @@
 /*
  * Define state type for better testibility
  */
-#ifndef __SCOUT_STATE_TYPES__
-#define __SCOUT_STATE_TYPES__
+#ifndef __STATE_TYPE_H__
+#define __STATE_TYPE_H__
+
+#include <map>
+#include <Arduino.h>
 
 #ifndef DEFAULT_INTERVAL
 #define DEFAULT_INTERVAL 600
 #endif
+
 
 /*
  * States that indicate where the system left when going to sleep, will also
  * transferred to the downstream uplications with message (basis of timing)
  */
 enum messageType {
-    UNKNOWN,
-    FIRST,
-    NORMAL,
-    CONFIG,
-    RETRY // a retry message could be a config message at the same time
+  UNKNOWN,
+  FIRST,
+  NORMAL,
+  CONFIG,
+  RETRY // a retry message could be a config message at the same time
 };
 
 /*
