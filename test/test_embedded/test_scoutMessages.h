@@ -57,15 +57,15 @@ void test_parsePK006() {
   systemState state;
   // Correct message format
   strcpy(bfr, "+DATA:PK006,60;");
-  TEST_ASSERT(parseIncoming(state, bfr));
+  TEST_ASSERT_TRUE(parseIncoming(state, bfr));
   TEST_ASSERT_EQUAL_UINT32(3600, state.new_interval);
   // short numbers
   strcpy(bfr, "+DATA:PK006,6;");
-  TEST_ASSERT(parseIncoming(state, bfr));
+  TEST_ASSERT_TRUE(parseIncoming(state, bfr));
   TEST_ASSERT_EQUAL_UINT32(360, state.new_interval);
   // long numbers
   strcpy(bfr, "+DATA:PK006,600;");
-  TEST_ASSERT(parseIncoming(state, bfr));
+  TEST_ASSERT_TRUE(parseIncoming(state, bfr));
   TEST_ASSERT_EQUAL_UINT32(36000, state.new_interval);
 }
 
@@ -75,7 +75,7 @@ void test_parseIncoming_incomplete() {
   systemState state;
   strcpy(bfr, "+DATA");
   TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-  state.new_interval = 0;
+  TEST_ASSERT_EQUAL_INT(0, state.new_interval);
 }
 
 void test_parseIncoming_invalid() {
@@ -85,7 +85,7 @@ void test_parseIncoming_invalid() {
     systemState state;
     strcpy(bfr, "   +DATA:PK006,33");
     TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-    state.new_interval = 0;
+    TEST_ASSERT_EQUAL_INT(0, state.new_interval);
   }
   // nonsense content
   {
@@ -93,7 +93,7 @@ void test_parseIncoming_invalid() {
     systemState state;
     strcpy(bfr, "+DATA:PK006,nonsense;");
     TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-    state.new_interval = 0;
+    TEST_ASSERT_EQUAL_INT(0, state.new_interval);
   }
   // negative values, lower fence
   {
@@ -101,14 +101,35 @@ void test_parseIncoming_invalid() {
     systemState state;
     strcpy(bfr, "+DATA:PK006,-10;");
     TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-    state.new_interval = 0;
+    TEST_ASSERT_EQUAL_INT(0, state.new_interval);
   }
   // test upper fence
   {
     char bfr[32] = {};
     systemState state;
-    strcpy(bfr, "+DATA:PK006,60000;");
+    strcpy(bfr, "+DATA:PK006,1441;");
     TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-    state.new_interval = 0;
+    TEST_ASSERT_EQUAL_INT(0, state.new_interval);
   }
+}
+
+void test_parsePK007() {
+    char bfr[32] = {0};
+  systemState state;
+  // Correct message format
+  strcpy(bfr, "+DATA:PK007,600;");
+  TEST_ASSERT_TRUE(parseIncoming(state, bfr));
+  TEST_ASSERT_EQUAL_UINT32(600, state.new_sleep);
+  TEST_ASSERT_EQUAL_UINT32(600, state.new_interval);
+  // short numbers
+  strcpy(bfr, "+DATA:PK006,6;");
+  TEST_ASSERT_TRUE(parseIncoming(state, bfr));
+  TEST_ASSERT_EQUAL_UINT32(6, state.new_sleep);
+  TEST_ASSERT_EQUAL_UINT32(600, state.new_interval);
+  // long numbers, testing fence
+  strcpy(bfr, "+DATA:PK006,259201;");
+  state.interval = 1200;
+  TEST_ASSERT_FALSE(parseIncoming(state, bfr));
+  TEST_ASSERT_EQUAL_UINT32(0, state.new_sleep);
+  TEST_ASSERT_EQUAL_UINT32(1200, state.new_interval);
 }

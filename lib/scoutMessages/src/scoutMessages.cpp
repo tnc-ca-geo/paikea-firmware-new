@@ -60,26 +60,39 @@ size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
 /*
  * Parse an incoming message. The data format is rather inconsistent,
  * but we are taking it from the legacy version of the firmware by Matt Arcady.
- * Example: +DATA:PK006,60
+ * Example: +DATA:PK006,60 (minutes) BUT +DATA:PK007:86400 (seconds)
  */
 bool scoutMessages::parseIncoming(systemState &state, char* bfr) {
-    char token[] = "+DATA:PK006,";
-    char* substr = strstr(bfr, token);
+    // with more tokens we should use enum but keep it simple for now
+    uint8_t message_type = 0; // 1 PK001, 2 PK002
     int32_t parsed = 0;
-    if (substr == NULL) return false;
-    if (substr != bfr) return false;
-    try { parsed = std::stoi(bfr+12, nullptr, 10); }
-    catch (...) { return false; }
-    if (parsed < 0) { return false; }
-    // invalid values, fences
-    else if (parsed < 1) {
-      state.new_interval = 0;
-      return false;
-    // daily is the maximum, we allow for interval
-    } else if (parsed > 1440 ) {
-        state.new_interval = 0;
-        return false;
+    const char* tokens[] = {"+DATA:PK006,", "+DATA:PK007,"};
+    // initialize values
+    state.new_interval = 0;
+    state.new_sleep = 0;
+    // check tokens
+    for (int i=0; i<2; i++) {
+      char* substr = strstr(bfr, tokens[i]);
+      if (substr == NULL) { continue; }
+      if (substr != bfr) { continue; }
+      message_type = i + 1;
+      break;
     }
-    else { state.new_interval = parsed  * 60; }
+    if (message_type == 0) { return false; }
+    // this works only because all tokens have the exact same length so far
+    try { parsed = std::stoi(bfr+12, nullptr, 10); }
+    catch (...) { return false; };
+    // values below zero are not allowed for both message types
+    if (parsed < 0) { return false; }
+    // this is in minutes
+    if (message_type == 1 && parsed > 1440 ) { return false; }
+    // this is in seconds
+    if (message_type == 2 && parsed > 259200 ) { return false; }
+    // finally set times
+    if (message_type == 1) { state.new_interval = parsed * 60; }
+    if (message_type == 2) {
+        state.new_interval = 600;
+        state.new_sleep = parsed;
+    }
     return true;
 }
