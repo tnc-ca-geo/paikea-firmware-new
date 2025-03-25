@@ -50,15 +50,14 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
   // and will be corrected below
   int32_t difference = (state.mode == CONFIG) ? MINIMUM_SLEEP : wakeUp - now;
 
-  Serial.print("interval: "); Serial.println(state.interval);
+  /* Serial.print("interval: "); Serial.println(state.interval);
   Serial.print("retry time: "); Serial.println(RETRY_INTERVAL);
-  Serial.print("start time: " ); printTime(state.start_time);
   Serial.print("\nreference time (gps): "); printTime( reference );
   Serial.print("\nnow: "); printTime(now);
   Serial.print("\nwakeup time: "); printTime(wakeUp);
   Serial.print("\ndifference: "); Serial.println(difference);
   Serial.print("retries left: "); Serial.println(state.retries);
-  Serial.println();
+  Serial.println(); */
 
   // set minimum sleep time, to ensure we wake up
   difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;

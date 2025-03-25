@@ -17,11 +17,11 @@
  * transferred to the downstream uplications with message (basis of timing)
  */
 enum messageType {
-  UNKNOWN,
-  FIRST,
   NORMAL,
+  FIRST,
+  RETRY,
   CONFIG,
-  RETRY // a retry message could be a config message at the same time
+  ERROR // a retry message could be a config message at the same time
 };
 
 /*
@@ -42,7 +42,7 @@ typedef struct {
     time_t expected_wakeup = 0;
     uint32_t interval = DEFAULT_INTERVAL; // reporting interval
     uint8_t retries = 3; // maximal number of retries
-    messageType mode = UNKNOWN;
+    messageType mode = NORMAL;
     // state
     bool gps_done = 0;
     bool rockblock_done = 0;

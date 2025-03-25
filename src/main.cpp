@@ -45,8 +45,8 @@
 // would be better in the stateType lib but for some reason there is a weird
 // conflict
 std::map<messageType, String> scoutMessageTypeLabels = {
-  {UNKNOWN, "UNKNOWN"}, {FIRST, "FIRST"}, {NORMAL, "NORMAL"},
-  {CONFIG, "CONFIG"}, {RETRY, "RETRY"}
+  {NORMAL, "NORMAL"}, {FIRST, "FIRST"}, {RETRY, "RETRY"},
+  {CONFIG, "CONFIG"}, {ERROR, "ERROR"}
 };
 
 /*
@@ -329,7 +329,9 @@ void Task_main_loop(void *pvParameters) {
           if (bfr[0] !='\0') {
             Serial.print("RB: Incoming: "); Serial.println(bfr);
           }
-        } else if (fsm_state == SLEEP_READY) { Serial.println("RB: Timeout"); }
+        } else if (fsm_state == SLEEP_READY) {
+          Serial.println("\nRB: Timeout\n");
+        }
         break;
       };
 
