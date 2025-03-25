@@ -72,7 +72,7 @@ size_t scoutMessages::createPK001_modified(char* bfr, const systemState state) {
         state.new_interval == 0) ? state.interval : state.new_interval;
     return snprintf(
         bfr, 128, "PK001;%s,%s,%s,batt:%.2f,int:%d,sl:%d,st:%d",
-        latBfr, lonBfr, timeBfr, state.bat, interval, state.new_sleep,
+        latBfr, lonBfr, timeBfr, state.bat, interval/60, state.new_sleep/60,
         state.mode);
 }
 
