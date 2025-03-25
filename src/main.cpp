@@ -88,7 +88,7 @@ ScoutStorage storage = ScoutStorage();
  * Read RTC system time and return UNIX epoch.
  */
 time_t getTime() {
-  struct timeval tv_now;
+  struct timeval tv_now = {0};
   gettimeofday(&tv_now, NULL);
   return tv_now.tv_sec;
 }
@@ -98,7 +98,7 @@ time_t getTime() {
  * through deep sleep.
  */
 void setTime(time_t time) {
-  struct timeval new_time;
+  struct timeval new_time = {0};
   new_time.tv_sec = time;
   settimeofday(&new_time, NULL);
 }
@@ -251,7 +251,6 @@ void Task_time(void *pvParameters) {
 
 /*
  * Task - Manage timing and logic of all components
- * TODO: Implement timeouts and retries
  */
 void Task_main_loop(void *pvParameters) {
   // setup
@@ -317,7 +316,7 @@ void Task_main_loop(void *pvParameters) {
       };
 
       case WAIT_FOR_RB: {
-        // parse incoming message buffer
+        // Check for incoming messages
         rockblock.getLastIncoming(bfr);
         // Determine next state, systemState will be updated as side effect
         fsm_state = helpers::update_state_from_rb_msg(
@@ -347,8 +346,8 @@ void Task_main_loop(void *pvParameters) {
 }
 
 /*
- * Hard timeout to recover a hangup system. Consider this a gentle watchdog that
- * is able to turn off peripherials. Hopefully this will never be triggered,
+ * Hard timeout to recover a hangup system. Consider this a gentle watchdog
+ * able to turn off peripherials. Hopefully this will never be triggered,
  * graceful timeout handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
@@ -357,9 +356,7 @@ void Task_timeout(void *pvParameters) {
     // shutdown
     if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
       char bfr[64] = {0};
-      state.retries = state.retries - 1;
-      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds. Retries left: %d",
-        SYSTEM_TIME_OUT + 20, state.retries);
+      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds", SYSTEM_TIME_OUT + 20);
       Serial.println(bfr);
       goToSleep();
       vTaskDelete(NULL);

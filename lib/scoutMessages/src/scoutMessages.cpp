@@ -71,8 +71,15 @@ bool scoutMessages::parseIncoming(systemState &state, char* bfr) {
     try { parsed = std::stoi(bfr+12, nullptr, 10); }
     catch (...) { return false; }
     if (parsed < 0) { return false; }
-    else if (parsed < 2) { state.new_interval = 2 * 60; }
-    else if (parsed > 1440 ) { state.new_interval = 1440 * 60; }
+    // invalid values, fences
+    else if (parsed < 1) {
+      state.new_interval = 0;
+      return false;
+    // daily is the maximum, we allow for interval
+    } else if (parsed > 1440 ) {
+        state.new_interval = 0;
+        return false;
+    }
     else { state.new_interval = parsed  * 60; }
     return true;
 }

@@ -1,6 +1,7 @@
 #include <unity.h>
 #include "test_rockblock.h"
 #include "test_helpers.h"
+#include "test_scoutMessages.h"
 #define UNITY_DOUBLE_PRECISION 1e-12
 
 void setUp() {}
@@ -23,6 +24,14 @@ int runUnityTests() {
     RUN_TEST(testGetNextWakeupTime);
     RUN_TEST(testGetSleepDifference);
     RUN_TEST(testUpdateStatefromRbMessage);
+    // test Scout messages
+    RUN_TEST(test_float2Nmea);
+    RUN_TEST(test_epoch2utc);
+    RUN_TEST(test_createPK001);
+    RUN_TEST(test_createPK001_extended);
+    RUN_TEST(test_parsePK006);
+    RUN_TEST(test_parseIncoming_incomplete);
+    RUN_TEST(test_parseIncoming_invalid);
     return UNITY_END();
 }
 
