@@ -41,6 +41,7 @@ typedef struct {
     time_t gps_read_time = 0; // time when GPS was read
     time_t expected_wakeup = 0;
     uint32_t interval = DEFAULT_INTERVAL; // reporting interval
+    uint32_t sleep = 0;
     uint8_t retries = 3; // maximal number of retries
     messageType mode = NORMAL;
     // state

@@ -47,7 +47,7 @@ size_t scoutMessages::createPK001(char* bfr, const systemState state) {
 /*
  * Create an extended PK001 message
  *
- * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:5
+ * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:10,st:5
  */
 size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
     size_t len = createPK001(bfr, state);
@@ -55,6 +55,25 @@ size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
         state.new_interval == 0) ? state.interval : state.new_interval;
     return snprintf(bfr+len, 128-len, ",int:%d,st:%d", (int) interval/60,
         (int) state.mode);
+}
+
+/*
+ * Create modified PK001 message
+ */
+size_t scoutMessages::createPK001_modified(char* bfr, const systemState state) {
+    // wasting some memory here
+    char latBfr[32] = {0};
+    char lonBfr[32] = {0};
+    char timeBfr[16] = {0};
+    float2Nmea(latBfr, state.lat, true);
+    float2Nmea(lonBfr, state.lng, false);
+    epoch2utc(timeBfr, state.gps_read_time);
+    uint16_t interval = (
+        state.new_interval == 0) ? state.interval : state.new_interval;
+    return snprintf(
+        bfr, 128, "PK001;%s,%s,%s,batt:%.2f,int:%d,sl:%d,st:%d",
+        latBfr, lonBfr, timeBfr, state.bat, interval, state.new_sleep,
+        state.mode);
 }
 
 /*

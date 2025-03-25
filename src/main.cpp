@@ -309,7 +309,7 @@ void Task_main_loop(void *pvParameters) {
             xSemaphoreGive(mutex_i2c);
           }
           // send message and update FSM
-          scoutMessages::createPK001_extended(bfr, state);
+          scoutMessages::createPK001_modified(bfr, state);
           rockblock.sendMessage(bfr);
         }
         break;
@@ -324,7 +324,7 @@ void Task_main_loop(void *pvParameters) {
           rockblock.state == SENDING || rockblock.state == INCOMING);
         // some output
         if (rockblock.sendSuccess) {
-          Serial.println("RB: Send Success");
+          Serial.println("\nRB: Send Success\n");
           if (bfr[0] !='\0') {
             Serial.print("RB: Incoming: "); Serial.println(bfr);
           }

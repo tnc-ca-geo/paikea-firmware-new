@@ -46,9 +46,11 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
     }
   }
 
-  // We sill have to calculate from now, this could be potentially negative
+  // We still have to calculate from now, this could be potentially negative
   // and will be corrected below
   int32_t difference = (state.mode == CONFIG) ? MINIMUM_SLEEP : wakeUp - now;
+  // Sleep time takes precidence
+  if (state.sleep != 0) { difference=state.sleep; }
 
   /* Serial.print("interval: "); Serial.println(state.interval);
   Serial.print("retry time: "); Serial.println(RETRY_INTERVAL);
@@ -90,10 +92,18 @@ mainFSM helpers::update_state_from_rb_msg(
         state.interval = state.new_interval;
         state.new_interval = 0;
       }
+      if (state.new_sleep != 0) {
+        state.sleep = state.new_sleep;
+        state.new_sleep = 0;
+      }
       if (bfr[0] != '\0' &&  scoutMessages::parseIncoming(state, bfr) ) {
         if ( state.new_interval != state.interval) {
-            state.mode = CONFIG;
-            state.interval = 600;
+          state.mode = CONFIG;
+          state.interval = 600;
+        }
+        if (state.new_sleep != 0) {
+          state.mode = CONFIG;
+          state.interval = 600;
         }
       }
       state.retries = 3;

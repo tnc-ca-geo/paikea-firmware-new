@@ -15,12 +15,12 @@
 #include <time.h>
 #include <stateType.h>
 
-
 namespace scoutMessages {
   size_t epoch2utc(char* bfr, time_t val);
   size_t float2Nmea(char* bfr, float val, bool latFlag=true);
   size_t createPK001(char* bfr, const systemState state);
   size_t createPK001_extended(char* bfr, const systemState state);
+  size_t createPK001_modified(char* bfr, const systemState state);
   bool parseIncoming(systemState &state, char* bfr);
 };
 
