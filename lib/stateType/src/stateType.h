@@ -39,12 +39,12 @@ typedef struct {
     // timing
     time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
     time_t gps_read_time = 0; // time when GPS was read
+    time_t expected_wakeup = 0;
     uint32_t interval = DEFAULT_INTERVAL; // reporting interval
     uint8_t retries = 3; // maximal number of retries
     messageType mode = UNKNOWN;
     // state
     bool gps_done = 0;
-    bool message_sent = 0;
     bool rockblock_done = 0;
     bool send_success = false;
     float lat=999;

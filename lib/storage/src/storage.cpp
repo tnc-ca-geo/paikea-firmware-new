@@ -13,6 +13,7 @@ void ScoutStorage::restore(systemState &state) {
     } else {
         // restore other variables, there are non during the first run
         state.start_time = rtc_start;
+        state.expected_wakeup = rtc_expected_wakeup;
         state.interval = rtc_interval;
         state.new_interval = rtc_new_interval;
         state.retries = rtc_retries;
@@ -25,7 +26,8 @@ void ScoutStorage::restore(systemState &state) {
 void ScoutStorage::store(systemState &state) {
     // we persist state only while sleeping for now
     rtc_first_run = false;
-    rtc_start = state.start_time;
+    if (rtc_start == 0) { rtc_start = state.start_time; }
+    rtc_expected_wakeup = state.expected_wakeup;
     rtc_interval = state.interval;
     rtc_new_interval = state.new_interval;
     rtc_sleep = state.new_sleep;

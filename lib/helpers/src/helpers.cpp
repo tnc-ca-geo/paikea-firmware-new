@@ -23,18 +23,20 @@ void helpers::printTime(const time_t time) {
 }
 
 /*
-* Get sleep time and retries from state. Side effects: state.mode will be
-corrected to NORMAL if we there is no time for retry.
+ * Get sleep time and retries from state. Side effects: state.mode will be
+ * corrected to NORMAL if we there is no time for retry.
 */
 uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
-  // We are counting from the last GPS read time since we might miss the
-  // the wakeUp time while trying to send. Use the start time if we don't
-  // have a fix.
-  time_t reference = (
-    state.gps_read_time != 0) ? state.gps_read_time : state.start_time;
+
+  // Make sure that the new time is not the same as the old time
+  time_t reference = (state.gps_read_time > state.expected_wakeup) ?
+    state.gps_read_time : state.expected_wakeup + 1;
+
   // Calculate time for wakeup, retry, and sleep
   time_t wakeUp = getNextWakeupTime(reference, state.interval);
   time_t retryWakeup = getNextWakeupTime(reference, RETRY_INTERVAL);
+
+  // Set mode to normal if retry time is over
   if ( state.mode == RETRY ) {
     if (retryWakeup + SYSTEM_TIME_OUT < wakeUp) { wakeUp = retryWakeup; }
     // no time for retries left
@@ -43,6 +45,7 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
       state.mode = NORMAL;
     }
   }
+
   // We sill have to calculate from now, this could be potentially negative
   // and will be corrected below
   int32_t difference = (state.mode == CONFIG) ? MINIMUM_SLEEP : wakeUp - now;
@@ -53,14 +56,17 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
   Serial.print("\nreference time (gps): "); printTime( reference );
   Serial.print("\nnow: "); printTime(now);
   Serial.print("\nwakeup time: "); printTime(wakeUp);
-  Serial.print("\ndifference: "); Serial.println((int) difference);
+  Serial.print("\ndifference: "); Serial.println(difference);
   Serial.print("retries left: "); Serial.println(state.retries);
   Serial.println();
 
   // set minimum sleep time, to ensure we wake up
   difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
   // Sleep time is 3 days maximum
-  difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP: difference;
+  difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP : difference;
+
+  state.expected_wakeup = now + difference;
+
   return difference;
 }
 
