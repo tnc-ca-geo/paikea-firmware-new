@@ -34,8 +34,8 @@
 // This unfortunately requires the Arduino String class in order to be
 // printable.
 std::map<RockblockStatus, String> statusLabels = {
-    {WAIT_STATUS, "WAIT"}, {OK_STATUS, "OK"}, {READY_STATUS, "READY"},
-    {ERROR_STATUS, "ERROR"}
+  {WAIT_STATUS, "WAIT"}, {OK_STATUS, "OK"}, {READY_STATUS, "READY"},
+  {ERROR_STATUS, "ERROR"}
 };
 
 /*

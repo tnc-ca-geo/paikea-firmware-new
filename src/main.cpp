@@ -38,8 +38,16 @@
 #define USE_DISPLAY 1
 
 // printf templates
-#define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds\n - difference: %ds\n"
+#define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds \
+  \n - difference: %ds\n - message type: %s\n"
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
+
+// would be better in the stateType lib but for some reason there is a weird
+// conflict
+std::map<messageType, String> scoutMessageTypeLabels = {
+  {NORMAL, "NORMAL"}, {FIRST, "FIRST"}, {RETRY, "RETRY"},
+  {CONFIG, "CONFIG"}, {ERROR, "ERROR"}
+};
 
 /*
  * FreeRTOS setup
@@ -80,7 +88,7 @@ ScoutStorage storage = ScoutStorage();
  * Read RTC system time and return UNIX epoch.
  */
 time_t getTime() {
-  struct timeval tv_now;
+  struct timeval tv_now = {0};
   gettimeofday(&tv_now, NULL);
   return tv_now.tv_sec;
 }
@@ -90,7 +98,7 @@ time_t getTime() {
  * through deep sleep.
  */
 void setTime(time_t time) {
-  struct timeval new_time;
+  struct timeval new_time = {0};
   new_time.tv_sec = time;
   settimeofday(&new_time, NULL);
 }
@@ -123,14 +131,17 @@ void goToSleep() {
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
-  snprintf(bfr, 128, SLEEP_TEMPLATE, state.interval, difference);
+  snprintf(
+    bfr, 128, SLEEP_TEMPLATE, state.interval, difference,
+    scoutMessageTypeLabels[state.mode]);
   Serial.print(bfr);
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
     display.off();
     // delete Rockblock task
     vTaskDelete( rockblockTaskHandle );
-    // Set port expander to known state, i.e. peripherals off
+    // Set port expander to known state, i.e. peripherals off, holding RB
+    // enable pin HIGH.
     expander.init();
     // turn Rockblock off
     rockblock.toggle(false);
@@ -240,7 +251,6 @@ void Task_time(void *pvParameters) {
 
 /*
  * Task - Manage timing and logic of all components
- * TODO: Implement timeouts and retries
  */
 void Task_main_loop(void *pvParameters) {
   // setup
@@ -299,14 +309,14 @@ void Task_main_loop(void *pvParameters) {
             xSemaphoreGive(mutex_i2c);
           }
           // send message and update FSM
-          scoutMessages::createPK001_extended(bfr, state);
+          scoutMessages::createPK001_modified(bfr, state);
           rockblock.sendMessage(bfr);
         }
         break;
       };
 
       case WAIT_FOR_RB: {
-        // parse incoming message buffer
+        // Check for incoming messages
         rockblock.getLastIncoming(bfr);
         // Determine next state, systemState will be updated as side effect
         fsm_state = helpers::update_state_from_rb_msg(
@@ -314,11 +324,13 @@ void Task_main_loop(void *pvParameters) {
           rockblock.state == SENDING || rockblock.state == INCOMING);
         // some output
         if (rockblock.sendSuccess) {
-          Serial.println("RB: Send Success");
+          Serial.println("\nRB: Send Success\n");
           if (bfr[0] !='\0') {
             Serial.print("RB: Incoming: "); Serial.println(bfr);
           }
-        } else if (fsm_state == SLEEP_READY) { Serial.println("RB: Timeout"); }
+        } else if (fsm_state == SLEEP_READY) {
+          Serial.println("\nRB: Timeout\n");
+        }
         break;
       };
 
@@ -334,8 +346,8 @@ void Task_main_loop(void *pvParameters) {
 }
 
 /*
- * Hard timeout to recover a hangup system. Consider this a gentle watchdog that
- * is able to turn off peripherials. Hopefully this will never be triggered,
+ * Hard timeout to recover a hangup system. Consider this a gentle watchdog
+ * able to turn off peripherials. Hopefully this will never be triggered,
  * graceful timeout handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
@@ -344,9 +356,7 @@ void Task_timeout(void *pvParameters) {
     // shutdown
     if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
       char bfr[64] = {0};
-      state.retries = state.retries - 1;
-      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds. Retries left: %d",
-        SYSTEM_TIME_OUT + 20, state.retries);
+      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds", SYSTEM_TIME_OUT + 20);
       Serial.println(bfr);
       goToSleep();
       vTaskDelete(NULL);

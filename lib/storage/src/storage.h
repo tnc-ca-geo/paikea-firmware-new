@@ -9,12 +9,13 @@
 #include <stateType.h>
 
 inline RTC_DATA_ATTR time_t rtc_start = 0;
+inline RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
 inline RTC_DATA_ATTR unsigned int rtc_interval = 600;
 inline RTC_DATA_ATTR bool rtc_first_run = true;
 inline RTC_DATA_ATTR unsigned int rtc_retries = 3;
 inline RTC_DATA_ATTR unsigned int rtc_new_interval = 0;
 inline RTC_DATA_ATTR unsigned int rtc_sleep = 0;
-inline RTC_DATA_ATTR messageType rtc_mode = UNKNOWN;
+inline RTC_DATA_ATTR messageType rtc_mode = NORMAL;
 
 /*
  * Store or restore some parts of the system state. Some aspects need to be

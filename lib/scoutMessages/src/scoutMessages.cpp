@@ -47,7 +47,7 @@ size_t scoutMessages::createPK001(char* bfr, const systemState state) {
 /*
  * Create an extended PK001 message
  *
- * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:5
+ * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:10,st:5
  */
 size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
     size_t len = createPK001(bfr, state);
@@ -58,21 +58,60 @@ size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
 }
 
 /*
+ * Create modified PK001 message
+ */
+size_t scoutMessages::createPK001_modified(char* bfr, const systemState state) {
+    // wasting some memory here
+    char latBfr[32] = {0};
+    char lonBfr[32] = {0};
+    char timeBfr[16] = {0};
+    float2Nmea(latBfr, state.lat, true);
+    float2Nmea(lonBfr, state.lng, false);
+    epoch2utc(timeBfr, state.gps_read_time);
+    uint16_t interval = (
+        state.new_interval == 0) ? state.interval : state.new_interval;
+    return snprintf(
+        bfr, 128, "PK001;%s,%s,%s,batt:%.2f,int:%d,sl:%d,st:%d",
+        latBfr, lonBfr, timeBfr, state.bat, interval/60, state.new_sleep/60,
+        state.mode);
+}
+
+/*
  * Parse an incoming message. The data format is rather inconsistent,
  * but we are taking it from the legacy version of the firmware by Matt Arcady.
- * Example: +DATA:PK006,60
+ * Example: +DATA:PK006,60 (minutes) BUT +DATA:PK007:86400 (seconds)
  */
 bool scoutMessages::parseIncoming(systemState &state, char* bfr) {
-    char token[] = "+DATA:PK006,";
-    char* substr = strstr(bfr, token);
+    // with more tokens we should use enum but keep it simple for now
+    uint8_t message_type = 0; // 1 PK001, 2 PK002
     int32_t parsed = 0;
-    if (substr == NULL) return false;
-    if (substr != bfr) return false;
+    const char* tokens[] = {"+DATA:PK006,", "+DATA:PK007,"};
+    // initialize values
+    state.new_interval = 0;
+    state.new_sleep = 0;
+    // check tokens
+    for (int i=0; i<2; i++) {
+      char* substr = strstr(bfr, tokens[i]);
+      if (substr == NULL) { continue; }
+      if (substr != bfr) { continue; }
+      message_type = i + 1;
+      break;
+    }
+    if (message_type == 0) { return false; }
+    // this works only because all tokens have the exact same length so far
     try { parsed = std::stoi(bfr+12, nullptr, 10); }
-    catch (...) { return false; }
+    catch (...) { return false; };
+    // values below zero are not allowed for both message types
     if (parsed < 0) { return false; }
-    else if (parsed < 2) { state.new_interval = 2 * 60; }
-    else if (parsed > 1440 ) { state.new_interval = 1440 * 60; }
-    else { state.new_interval = parsed  * 60; }
+    // this is in minutes
+    if (message_type == 1 && parsed > 1440 ) { return false; }
+    // this is in seconds
+    if (message_type == 2 && parsed > 259200 ) { return false; }
+    // finally set times
+    if (message_type == 1) { state.new_interval = parsed * 60; }
+    if (message_type == 2) {
+        state.new_interval = 600;
+        state.new_sleep = parsed;
+    }
     return true;
 }

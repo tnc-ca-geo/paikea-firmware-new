@@ -1,23 +1,27 @@
 /*
  * Define state type for better testibility
  */
-#ifndef __SCOUT_STATE_TYPES__
-#define __SCOUT_STATE_TYPES__
+#ifndef __STATE_TYPE_H__
+#define __STATE_TYPE_H__
+
+#include <map>
+#include <Arduino.h>
 
 #ifndef DEFAULT_INTERVAL
 #define DEFAULT_INTERVAL 600
 #endif
+
 
 /*
  * States that indicate where the system left when going to sleep, will also
  * transferred to the downstream uplications with message (basis of timing)
  */
 enum messageType {
-    UNKNOWN,
-    FIRST,
-    NORMAL,
-    CONFIG,
-    RETRY // a retry message could be a config message at the same time
+  NORMAL,
+  FIRST,
+  RETRY,
+  CONFIG,
+  ERROR // a retry message could be a config message at the same time
 };
 
 /*
@@ -35,12 +39,13 @@ typedef struct {
     // timing
     time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
     time_t gps_read_time = 0; // time when GPS was read
+    time_t expected_wakeup = 0;
     uint32_t interval = DEFAULT_INTERVAL; // reporting interval
+    uint32_t sleep = 0;
     uint8_t retries = 3; // maximal number of retries
-    messageType mode = UNKNOWN;
+    messageType mode = NORMAL;
     // state
     bool gps_done = 0;
-    bool message_sent = 0;
     bool rockblock_done = 0;
     bool send_success = false;
     float lat=999;
