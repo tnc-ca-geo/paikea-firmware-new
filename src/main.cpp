@@ -158,23 +158,26 @@ void goToSleep() {
 /*
  * Blink LED 1 and 0 as simple system indicator.
  * A mutex is needed since the I2C bus is shared with display and I/O expander.
- * TODO: move mutex to tca95xx module?
  *
- * LED1 - Blink 1s before GPS fix
- * LED1 - Solid after GPS fix.
- * LED0 - Solid after radio transmitted.
+ * Use only LED 1 because they cannot be distinguished using the light tube
+ *
+ * LED1 - Blink after 2000 before GPS fix
+ * LED1 - Blink 3s after GPS fix.
  * OFF - Sleep (triggered by resetting the expander in the sleep function)
+ *
+ * We could use both for better visibility.
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   uint8_t ctr = 0;
   while (true) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-      expander.digitalWrite( LED01, blink_state || state.gps_done );
-      expander.digitalWrite( LED00, blink_state || state.rockblock_done );
+      expander.digitalWrite( LED01, blink_state);
+      // expander.digitalWrite( LED00, blink_state || state.rockblock_done );
       xSemaphoreGive(mutex_i2c);
     }
-    blink_state = !(ctr % 20);
+    uint8_t divider = state.gps_done ? 15 : 3;
+    blink_state = !(ctr % divider);
     ctr++;
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
