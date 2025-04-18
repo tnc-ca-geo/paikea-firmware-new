@@ -1,4 +1,6 @@
 #include <scoutMessages.h>
+// required for snprintf
+#include <inttypes.h>
 
 #ifndef DEFAULT_INTERVAL
 #define DEFAULT INTERVAL 600
@@ -68,12 +70,14 @@ size_t scoutMessages::createPK001_modified(char* bfr, const systemState state) {
     float2Nmea(latBfr, state.lat, true);
     float2Nmea(lonBfr, state.lng, false);
     epoch2utc(timeBfr, state.gps_read_time);
-    uint16_t interval = (
+    uint32_t interval = (
         state.new_interval == 0) ? state.interval : state.new_interval;
+    uint32_t sleep = (
+        state.new_sleep == 0) ? state.sleep : state.new_sleep;
     return snprintf(
         bfr, 128, "PK001;%s,%s,%s,batt:%.2f,int:%d,sl:%d,st:%d",
-        latBfr, lonBfr, timeBfr, state.bat, interval/60, state.new_sleep/60,
-        state.mode);
+        latBfr, lonBfr, timeBfr, state.bat, (uint32_t) interval/60,
+        (uint32_t) sleep/60, state.mode);
 }
 
 /*

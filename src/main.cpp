@@ -127,7 +127,7 @@ float readBatteryVoltage() {
  */
 void goToSleep() {
   char bfr[128] = {0};
-  uint16_t difference = helpers::getSleepDifference( state, getTime() );
+  uint32_t difference = helpers::getSleepDifference( state, getTime() );
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
@@ -395,7 +395,7 @@ void setup() {
   display.begin();
   display.off();
   // Output some useful message
-  Serial.println("\nScout buoy firmware v3.0.0-pre-alpha");
+  Serial.println("\nScout buoy firmware v3.0.2-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2025\n");
