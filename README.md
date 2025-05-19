@@ -2,7 +2,6 @@
 
 An attempt to create a new firmware for Scout
 
-
 ## (Legacy v2) Message formats
 
 PK001, Pk006, and Pk007 are still in use
@@ -44,15 +43,25 @@ Example: ```+DATA:PK007,259200;```
 **NOTE:**
 - we are using seconds here, INCONSISTENT!
 
+## v3 message formats
 
+PK006, and PK007 are still used as download messages to allow for compatible operation between v2 and v3
 
-## New message format
+### PK101 (modified PK001)
 
-The message format has been extended. In a draft version, we still call the message PK001, and the extended version is fully compatible with the original PK001 and will be processed by the backend as is. 
+This is a temporary format and might change before finalized 
 
-Two fields have been added: 
+Example: ```PK101;lat:3750.5119,NS:N,lon:12216.5280,EW:W,utc:194031.00,batt:3.74,int:10,sl:0,st:0```
 
-- interval (int): confirms the current sending interval
+```PK101;lat:{Latitude in NMEA format},NS:{N|S},lon:{Longitude},EW:{E|W},utc:{utc in NMEA},batt:{voltage},int:{interval_mins},sl:{time_mins},st:{status or mode}```
+
+The message format has been extended. In a draft version, we call the message PK01, and the extended version is fully compatible with the original PK001 and will be processed by the backend as is. 
+
+Three fields have been added: 
+
+- interval (int): confirms the current sending interval in minutes
+
+- sleeb (int}: sleep time in minutes
   
 - status (st): indicates for what reason the message has been send
 
