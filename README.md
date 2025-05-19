@@ -2,6 +2,50 @@
 
 An attempt to create a new firmware for Scout
 
+
+## (Legacy v2) Message formats
+
+PK001, Pk006, and Pk007 are still in use
+
+### PK001 - FW v2 by Matt Arcady
+
+Example: ```PK001;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049.00,sog:0.000,cog:0,sta:00,batt:4.20```
+
+```PK001;lat:{Latitude in NMEA format},NS:{N|S},lon:{Longitude},EW:{E|W},utc:{utc in NMEA},sog:{SOG},cog:{COG},sta:00,batt:{voltage}```
+
+NMEA see https://www.gpsworld.com/what-exactly-is-gps-nmea-data/
+
+SOG ... Speed over ground (unused or 0)
+COG ... Course over ground (unused or 0)
+sta ... status (unused)
+
+### PK004 - FW v2 by Matt Arcady - obsolete
+
+A message sent out by the deprecated handset
+
+### PK005 - FW v2 Matt Arcady - obsolete
+
+A message to put the buoy in terminal, debug, or update mode
+
+### PK006 - Interval 
+Example: ```+DATA:PK006,10;```
+
+```+DATA:PK006,{minutes}```
+
+**NOTE:**
+- we are using minutes
+- rather inconsistent format using +DATA and ;
+
+### PK007 - Sleep
+Example: ```+DATA:PK007,259200;```
+
+```+DATA:PK007,{seconds}```
+
+**NOTE:**
+- we are using seconds here, INCONSISTENT!
+
+
+
 ## New message format
 
 The message format has been extended. In a draft version, we still call the message PK001, and the extended version is fully compatible with the original PK001 and will be processed by the backend as is. 
