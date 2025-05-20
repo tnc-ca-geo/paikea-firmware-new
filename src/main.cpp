@@ -312,7 +312,7 @@ void Task_main_loop(void *pvParameters) {
             xSemaphoreGive(mutex_i2c);
           }
           // send message and update FSM
-          scoutMessages::createPK001_modified(bfr, state);
+          scoutMessages::createPK101(bfr, state);
           rockblock.sendMessage(bfr);
         }
         break;

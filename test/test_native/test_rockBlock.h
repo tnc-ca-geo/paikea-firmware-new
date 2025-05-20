@@ -1,3 +1,7 @@
+/* 
+ * We currently not using native tests due to many time-consuming 
+ * implementation difficulties. But I leave this here as a touch point.
+ */
 #include <unity.h>
 #include <stdint.h>
 // project

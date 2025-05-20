@@ -17,10 +17,16 @@
 
 namespace scoutMessages {
   size_t epoch2utc(char* bfr, time_t val);
+  // create a simpler version since we don't need to transmit .00 with
+  // every message
+  size_t epoch2utcSimple(char* bfr, time_t val);
   size_t float2Nmea(char* bfr, float val, bool latFlag=true);
   size_t createPK001(char* bfr, const systemState state);
+  // TODO: reimplement original PK001 if needed
+  // PK001_extended adds extra fields to PK001, for development only 
   size_t createPK001_extended(char* bfr, const systemState state);
-  size_t createPK001_modified(char* bfr, const systemState state);
+  // Modified version of PK101 as used in v3
+  size_t createPK101(char* bfr, const systemState state);
   bool parseIncoming(systemState &state, char* bfr);
 };
 

@@ -29,6 +29,8 @@ int runUnityTests() {
     RUN_TEST(test_epoch2utc);
     RUN_TEST(test_createPK001);
     RUN_TEST(test_createPK001_extended);
+    // RUN_TEST(test_createPK101);
+    RUN_TEST(test_createPK101_change);
     RUN_TEST(test_parsePK006);
     RUN_TEST(test_parseIncoming_incomplete);
     RUN_TEST(test_parseIncoming_invalid);

@@ -28,6 +28,15 @@ size_t scoutMessages::epoch2utc(char* bfr, time_t val) {
 }
 
 /*
+ * Create utc time hhmmss as it used in PK101 messages.
+ */
+size_t scoutMessages::epoch2utcSimple(char* bfr, time_t val) {
+    struct tm *tmp = gmtime(&val);
+    return snprintf(
+        bfr, 16, "utc:%02d%02d%02d", tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
+}
+
+/*
  * Create a PK001 message compatible with the MicroPython Firmware by
  * Matt Acidy
  *
@@ -60,22 +69,28 @@ size_t scoutMessages::createPK001_extended(char* bfr, const systemState state) {
 }
 
 /*
- * Create modified PK001 message
+ * Create modified PK101 message
+ * - sog, removed
+ * - cog, removed
+ * - sta, removed
+ * - sl, added, sleep time in minutes
+ * - int, added, interval in minutes
+ * - st, added, status 0, 1, 2, 3, 4
  */
-size_t scoutMessages::createPK001_modified(char* bfr, const systemState state) {
+size_t scoutMessages::createPK101(char* bfr, const systemState state) {
     // wasting some memory here
     char latBfr[32] = {0};
     char lonBfr[32] = {0};
     char timeBfr[16] = {0};
     float2Nmea(latBfr, state.lat, true);
     float2Nmea(lonBfr, state.lng, false);
-    epoch2utc(timeBfr, state.gps_read_time);
+    epoch2utcSimple(timeBfr, state.gps_read_time);
     uint32_t interval = (
         state.new_interval == 0) ? state.interval : state.new_interval;
     uint32_t sleep = (
         state.new_sleep == 0) ? state.sleep : state.new_sleep;
     return snprintf(
-        bfr, 128, "PK001;%s,%s,%s,batt:%.2f,int:%d,sl:%d,st:%d",
+        bfr, 128, "PK101;%s,%s,%s,batt:%.1f,int:%d,sl:%d,st:%d",
         latBfr, lonBfr, timeBfr, state.bat, (uint32_t) interval/60,
         (uint32_t) sleep/60, state.mode);
 }

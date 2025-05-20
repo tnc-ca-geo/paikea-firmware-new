@@ -52,6 +52,40 @@ void test_createPK001_extended() {
     "sog:0.000,cog:0,sta:00,batt:4.20,int:10,st:0", bfr);
 }
 
+void test_createPK101() {
+  char bfr[255] = {0};
+  systemState state;
+  state.lat = 35.5;
+  state.lng = -122;
+  state.gps_read_time = 1726686649;
+  state.bat = 4.2;
+  state.interval = 600; // internally we are using seconds but minutes in messages
+  state.new_interval = 0;
+  state.sleep = 0;
+  state.mode = RETRY;
+  createPK101(bfr, state);
+  TEST_ASSERT_EQUAL_STRING(
+    "PK101;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049,"
+    "batt:4.2,int:10,sl:0,st:2", bfr);
+}
+
+void test_createPK101_change() {
+  char bfr[255] = {0};
+  systemState state;
+  state.lat = 35.5;
+  state.lng = -122;
+  state.gps_read_time = 1726686649;
+  state.bat = 4.2;
+  state.interval = 600; // internally we are using seconds but minutes in messages
+  state.new_interval = 1200;
+  state.sleep = 0;
+  state.mode = CONFIG;
+  createPK101(bfr, state);
+  TEST_ASSERT_EQUAL_STRING(
+    "PK101;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049,"
+    "batt:4.2,int:20,sl:0,st:3", bfr);
+}
+
 void test_parsePK006() {
   char bfr[32] = {0};
   systemState state;
