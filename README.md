@@ -2,13 +2,66 @@
 
 An attempt to create a new firmware for Scout
 
-## New message format
+## (Legacy v2) Message formats
 
-The message format has been extended. In a draft version, we still call the message PK001, and the extended version is fully compatible with the original PK001 and will be processed by the backend as is. 
+PK001, Pk006, and Pk007 are still in use
 
-Two fields have been added: 
+### PK001 - FW v2 by Matt Arcady
 
-- interval (int): confirms the current sending interval
+Example: ```PK001;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049.00,sog:0.000,cog:0,sta:00,batt:4.20```
+
+```PK001;lat:{Latitude in NMEA format},NS:{N|S},lon:{Longitude},EW:{E|W},utc:{utc in NMEA},sog:{SOG},cog:{COG},sta:00,batt:{voltage}```
+
+NMEA see https://www.gpsworld.com/what-exactly-is-gps-nmea-data/
+
+SOG ... Speed over ground (unused or 0)
+COG ... Course over ground (unused or 0)
+sta ... status (unused)
+
+### PK004 - FW v2 by Matt Arcady - obsolete
+
+A message sent out by the deprecated handset
+
+### PK005 - FW v2 Matt Arcady - obsolete
+
+A message to put the buoy in terminal, debug, or update mode
+
+### PK006 - Interval 
+Example: ```+DATA:PK006,10;```
+
+```+DATA:PK006,{minutes}```
+
+**NOTE:**
+- we are using minutes
+- rather inconsistent format using +DATA and ;
+
+### PK007 - Sleep
+Example: ```+DATA:PK007,259200;```
+
+```+DATA:PK007,{seconds}```
+
+**NOTE:**
+- we are using seconds here, INCONSISTENT!
+
+## v3 message formats
+
+PK006, and PK007 are still used as download messages to allow for compatible operation between v2 and v3
+
+### PK101 (modified PK001)
+
+This is a temporary format and might change before finalized 
+
+Example: ```PK101;lat:3750.5119,NS:N,lon:12216.5280,EW:W,utc:194031.00,batt:3.74,int:10,sl:0,st:0```
+
+```PK101;lat:{Latitude in NMEA format},NS:{N|S},lon:{Longitude},EW:{E|W},utc:{utc in NMEA},batt:{voltage},int:{interval_mins},sl:{time_mins},st:{status or mode}```
+
+The message format has been extended. In a draft version, we call the message PK01, and the extended version is fully compatible with the original PK001 and will be processed by the backend as is. 
+
+Three fields have been added: 
+
+- interval (int): confirms the current sending interval in minutes
+
+- sleeb (int}: sleep time in minutes
   
 - status (st): indicates for what reason the message has been send
 
