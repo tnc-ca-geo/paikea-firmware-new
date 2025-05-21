@@ -1,9 +1,9 @@
 /* -----------------------------------------------------------------------------
  * Firmware for Scout buoy device.
  *
- * This is a very much stripped down, simpler version than the original (v2)
- * MicroPython by Matt Arcady. We focus on simplicity, timing, and behavior that
- * is transparent and predictable to the user.
+ * A much simpler firmware for the Scout buoy than the original (v2)
+ * MicroPython version by Matt Arcady. We focus on simplicity, timing, 
+ * and behavior that is transparent and predictable to the user.
  *
  * https://github.com/tnc-ca-geo/paikea-firmware-new.git
  *
@@ -14,7 +14,7 @@
 
 /*
  * We still heavily relay on third party libraries (mostly from the Arduino
- * ecosystsem that we should replace in the future with your own, IF this code
+ * ecosystsem) that we should replace in the future with your own, IF this code
  * will be widely used in production.
  */
 #include <Arduino.h>
@@ -83,6 +83,9 @@ systemState state;
 // Storage
 ScoutStorage storage = ScoutStorage();
 
+/*
+ * Keep functions that interact with ESP in main.cpp for now
+ */
 
 /*
  * Read RTC system time and return UNIX epoch.
@@ -173,7 +176,6 @@ void Task_blink(void *pvParamaters) {
   while (true) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
       expander.digitalWrite( LED01, blink_state);
-      // expander.digitalWrite( LED00, blink_state || state.rockblock_done );
       xSemaphoreGive(mutex_i2c);
     }
     uint8_t divider = state.gps_done ? 15 : 3;
@@ -184,7 +186,8 @@ void Task_blink(void *pvParamaters) {
 }
 
 /*
- * DEBUG ONLY: Output part of the state to the display. Use mutex for I2C bus.
+ * DEBUG ONLY: Output part of the state to the LilyGO display. Use mutex for 
+ * I2C bus.
  */
 void Task_display(void *pvParameters) {
   char out_string[44] = {0};
@@ -207,8 +210,8 @@ void Task_display(void *pvParameters) {
  * Running the radio.
  */
 void Task_rockblock(void *pvParameters) {
-  // Give time to suspended task after creation
-  vTaskDelay( pdMS_TO_TICKS( 100 ) );
+  // Give some time to the task that has been suspended after creation
+  // vTaskDelay( pdMS_TO_TICKS( 100 ) );
   Serial.println("Start radio loop");
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     rockblock.toggle(true);
@@ -224,8 +227,9 @@ void Task_rockblock(void *pvParameters) {
  * Run GPS
  */
 void Task_gps(void *pvParameters) {
-  // Give time to suspended task after creation
-  vTaskDelay( pdMS_TO_TICKS( 100 ) );
+  // Give some time to the task that has been suspended after creation
+  // TODO: check whether that makes actually sense
+  // vTaskDelay( pdMS_TO_TICKS( 100 ) );
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
@@ -264,10 +268,10 @@ void Task_main_loop(void *pvParameters) {
   // for state change
   uint8_t ctr = 0;
 
-  // loop
   while (true) {
 
-    // Go to sleep if peripherials are not powered
+    // Go to sleep if peripherials are not powered, only useful when on serial
+    // monitor
     if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
       if (!expander.check()) {
         Serial.println(
@@ -365,7 +369,7 @@ void Task_timeout(void *pvParameters) {
       vTaskDelete(NULL);
     }
     // no hurry here
-    vTaskDelay( pdMS_TO_TICKS( 2000 ) );
+    vTaskDelay( pdMS_TO_TICKS( 5000 ) );
   }
 }
 
@@ -406,7 +410,7 @@ void setup() {
   Serial.println();
   // ----- Init IO Expander -----------------------
   expander.init();
-  // ----- Init Blink -----------------------------
+  // ----- Init LEDs for Blink --------------------
   expander.pinMode(10, EXPANDER_OUTPUT);
   expander.pinMode(7, EXPANDER_OUTPUT);
 

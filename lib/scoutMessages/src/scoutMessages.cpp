@@ -56,7 +56,7 @@ size_t scoutMessages::createPK001(char* bfr, const systemState state) {
 }
 
 /*
- * Create an extended PK001 message
+ * Create an extended PK001 message, as used in firmware development    
  *
  * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:10,st:5
  */
