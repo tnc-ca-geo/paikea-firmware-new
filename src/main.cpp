@@ -322,7 +322,7 @@ void Task_main_loop(void *pvParameters) {
         // Check for incoming messages
         rockblock.getLastIncoming(bfr);
         // Determine next state, systemState will be updated as side effect
-        fsm_state = helpers::update_state_from_rb_msg(
+        fsm_state = helpers::processRockblockMessage(
           state, bfr, getRunTime(), rockblock.sendSuccess,
           rockblock.state == SENDING || rockblock.state == INCOMING);
         // some output

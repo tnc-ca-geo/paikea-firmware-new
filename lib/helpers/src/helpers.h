@@ -28,7 +28,7 @@ namespace helpers {
   // Get sleep time and retries from state
   uint32_t getSleepDifference(systemState &state, const time_t now);
   // Update state from incoming message
-  mainFSM update_state_from_rb_msg(
+  mainFSM processRockblockMessage(
     systemState &state, char *bfr, time_t runtime, bool success, bool busy);
   // Update state from GPS
   mainFSM update_state_from_gps(

@@ -25,7 +25,7 @@ void helpers::printTime(const time_t time) {
 /*
  * Get sleep time and retries from state. Side effects: state.mode will be
  * corrected to NORMAL if we there is no time for retry.
-*/
+ */
 uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
 
   // Make sure that the new time is not the same as the old time
@@ -80,9 +80,9 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
  * :param bool busy: RB still busy
  * :return type fsmState
  */
-mainFSM helpers::update_state_from_rb_msg(
-    systemState &state, char *bfr, time_t runtime, bool success=false,
-    bool busy=true
+mainFSM helpers::processRockblockMessage(
+  systemState &state, char *bfr, time_t runtime, bool success=false,
+  bool busy=true
 ) {
     // Success and done retrieving incoming message
     if (success && !busy) {
@@ -96,23 +96,22 @@ mainFSM helpers::update_state_from_rb_msg(
         state.sleep = state.new_sleep;
         state.new_sleep = 0;
       }
-      if (bfr[0] != '\0' &&  scoutMessages::parseIncoming(state, bfr) ) {
-        if ( state.new_interval != state.interval) {
-          state.mode = CONFIG;
-          state.interval = 600;
-        }
-        if (state.new_sleep != 0) {
-          state.mode = CONFIG;
-          state.interval = 600;
+      if (bfr[0] != '\0') {
+        if (scoutMessages::parseIncoming(state, bfr)) {
+          if (state.new_interval != state.interval || state.new_sleep != 0) {
+            state.mode = CONFIG;
+            state.interval = 600;
+          }
+        } else {
+          state.mode = ERROR;
         }
       }
       state.retries = 3;
     }
-
     // Timeout
     else if (runtime > SYSTEM_TIME_OUT && !busy) { state.mode = RETRY; }
-
-    // Keep polling
+    // Keep polling for incoming messages
+    else if (busy) { return WAIT_FOR_RB; }
     else { return WAIT_FOR_RB; }
 
     // check whether retries left
@@ -125,6 +124,7 @@ mainFSM helpers::update_state_from_rb_msg(
         }
     }
 
+    // success or timeout 
     return SLEEP_READY;
 }
 
@@ -137,7 +137,7 @@ mainFSM helpers::update_state_from_rb_msg(
  * :return type mainFSM:
  */
 mainFSM helpers::update_state_from_gps(
-    systemState &state, Gps &gps, time_t time, bool timeout=false
+  systemState &state, Gps &gps, time_t time, bool timeout=false
 ) {
     if (!gps.updated && !timeout) { return WAIT_FOR_GPS; }
     state.lat = gps.lat;
