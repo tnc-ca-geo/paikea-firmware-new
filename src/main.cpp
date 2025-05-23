@@ -295,7 +295,7 @@ void Task_main_loop(void *pvParameters) {
         // update state
         fsm_state = helpers::update_state_from_gps(
           state, gps, getTime(), timeout_test);
-        // set reat time clock and some output
+        // set read time clock and some output
         if (gps.updated) {
           setTime( gps.get_corrected_epoch() );
           snprintf(bfr, 255, GPS_MESSAGE_TEMPLATE, state.lat, state.lng,
@@ -325,18 +325,18 @@ void Task_main_loop(void *pvParameters) {
       case WAIT_FOR_RB: {
         // Check for incoming messages
         rockblock.getLastIncoming(bfr);
-        // Determine next state, systemState will be updated as side effect
+        // Determine next state, systemState will be updated as a side effect
+        // I considered passing a reference to the rockblock instance but
+        // that makes testing harder, therefore passing only select values.
         fsm_state = helpers::processRockblockMessage(
           state, bfr, getRunTime(), rockblock.sendSuccess,
           rockblock.state == SENDING || rockblock.state == INCOMING);
-        // some output
-        if (rockblock.sendSuccess) {
-          Serial.println("\nRB: Send Success\n");
-          if (bfr[0] !='\0') {
-            Serial.print("RB: Incoming: "); Serial.println(bfr);
+        if (fsm_state == SLEEP_READY) {
+          if (state.mode == RETRY) {
+            Serial.println("\nRB: Timeout\n");
+          } else {
+            Serial.println("\nRB: Send success\n");
           }
-        } else if (fsm_state == SLEEP_READY) {
-          Serial.println("\nRB: Timeout\n");
         }
         break;
       };

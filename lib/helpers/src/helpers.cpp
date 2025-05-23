@@ -84,47 +84,47 @@ mainFSM helpers::processRockblockMessage(
   systemState &state, char *bfr, time_t runtime, bool success=false,
   bool busy=true
 ) {
-    if (!busy) {
-      // RB send success
-      if (success) {
-        state.mode = NORMAL;
-        // Apply new interval AFTER config message sent successfully
-        if (state.new_interval != 0) {
-          state.interval = state.new_interval;
-          state.new_interval = 0;
-        }
-        // Apply new sleep AFTER config message sent successfully
-        if (state.new_sleep != 0) {
-          state.sleep = state.new_sleep;
-          state.new_sleep = 0;
-        }
-        // process incoming message
-        if (bfr[0] != '\0') {
-          if (scoutMessages::parseIncoming(state, bfr)) {
-            state.mode = CONFIG;
-            state.interval = 600;
-          } else {
-            state.mode = ERROR;
-          }
-        }
-        state.retries = 3;
-        return SLEEP_READY;
+  if (!busy) {
+    // RB send success
+    if (success) {
+      state.mode = NORMAL;
+      // Apply new interval AFTER config message sent successfully
+      if (state.new_interval != 0) {
+        state.interval = state.new_interval;
+        state.new_interval = 0;
       }
-      // RB timeout
-      if (runtime > SYSTEM_TIME_OUT) {
-        state.mode = RETRY; 
-        // check whether retries left
-        if (state.retries > 0) {
-          state.retries--;
+      // Apply new sleep AFTER config message sent successfully
+      if (state.new_sleep != 0) {
+        state.sleep = state.new_sleep;
+        state.new_sleep = 0;
+      }
+      // process incoming message, when available
+      if (bfr[0] != '\0') {
+        if (scoutMessages::parseIncoming(state, bfr)) {
+          state.mode = CONFIG;
+          state.interval = 600;
         } else {
-          state.retries = 3;
-          state.mode = NORMAL;
+          state.mode = ERROR;
         }
-        return SLEEP_READY;
       }
+      state.retries = 3;
+      return SLEEP_READY;
     }
-    // keep polling
-    return WAIT_FOR_RB;
+    // RB timeout
+    if (runtime > SYSTEM_TIME_OUT) {
+      state.mode = RETRY; 
+      // check whether retries left
+      if (state.retries > 0) {
+        state.retries--;
+      } else {
+        state.retries = 3;
+        state.mode = NORMAL;
+      }
+      return SLEEP_READY;
+    }
+  }
+  // keep polling
+  return WAIT_FOR_RB;
 }
 
 /*
