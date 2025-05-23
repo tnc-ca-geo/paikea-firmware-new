@@ -11,7 +11,6 @@
 #define DEFAULT_INTERVAL 600
 #endif
 
-
 /*
  * States that indicate where the system left when going to sleep, will also
  * transferred to the downstream uplications with message (basis of timing)

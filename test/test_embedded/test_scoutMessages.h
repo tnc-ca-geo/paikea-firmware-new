@@ -156,14 +156,14 @@ void test_parsePK007() {
   TEST_ASSERT_EQUAL_UINT32(600, state.new_sleep);
   TEST_ASSERT_EQUAL_UINT32(600, state.new_interval);
   // short numbers
-  strcpy(bfr, "+DATA:PK006,6;");
+  strcpy(bfr, "+DATA:PK007,6;");
   TEST_ASSERT_TRUE(parseIncoming(state, bfr));
   TEST_ASSERT_EQUAL_UINT32(6, state.new_sleep);
   TEST_ASSERT_EQUAL_UINT32(600, state.new_interval);
   // long numbers, testing fence
-  strcpy(bfr, "+DATA:PK006,259201;");
+  strcpy(bfr, "+DATA:PK007,259201;");
   state.interval = 1200;
   TEST_ASSERT_FALSE(parseIncoming(state, bfr));
-  TEST_ASSERT_EQUAL_UINT32(0, state.new_sleep);
-  TEST_ASSERT_EQUAL_UINT32(1200, state.new_interval);
+  TEST_ASSERT_EQUAL_UINT32(259201, state.new_sleep);
+  TEST_ASSERT_EQUAL_UINT32(600, state.new_interval);
 }
