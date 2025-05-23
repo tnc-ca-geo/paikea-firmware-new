@@ -48,10 +48,12 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
 
   // We still have to calculate from now, this could be potentially negative
   // and will be corrected below
-  int32_t difference = (state.mode == CONFIG) ? MINIMUM_SLEEP : wakeUp - now;
+  int32_t difference = wakeUp - now;
+  // Use MINIMUM sleep time we meassage triggers feedback: config change confirmation
+  // or error message
+  if (state.mode == CONFIG || state.mode == ERROR) { difference = MINIMUM_SLEEP; }
   // Sleep time takes precidence
   if (state.sleep != 0) { difference = state.sleep; }
-
   /* Serial.print("interval: "); Serial.println(state.interval);
   Serial.print("retry time: "); Serial.println(RETRY_INTERVAL);
   Serial.print("\nreference time (gps): "); printTime( reference );
@@ -60,14 +62,12 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
   Serial.print("\ndifference: "); Serial.println(difference);
   Serial.print("retries left: "); Serial.println(state.retries);
   Serial.println(); */
-
   // set minimum sleep time, to ensure we wake up
   difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
   // Sleep time is 3 days maximum
   difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP : difference;
-
+  // store expected wakeup to account for clock drift later
   state.expected_wakeup = now + difference;
-
   return difference;
 }
 
@@ -84,6 +84,8 @@ mainFSM helpers::processRockblockMessage(
   systemState &state, char *bfr, time_t runtime, bool success=false,
   bool busy=true
 ) {
+    // Serial.println("Processing Rockblock message");
+    // Serial.print("bfr: "); Serial.println(bfr);
     // Success and done retrieving incoming message
     if (success && !busy) {
       state.mode = state.gps_done ? NORMAL : RETRY;
@@ -110,10 +112,7 @@ mainFSM helpers::processRockblockMessage(
     }
     // Timeout
     else if (runtime > SYSTEM_TIME_OUT && !busy) { state.mode = RETRY; }
-    // Keep polling for incoming messages
-    else if (busy) { return WAIT_FOR_RB; }
     else { return WAIT_FOR_RB; }
-
     // check whether retries left
     if (state.mode == RETRY) {
         if (state.retries > 0) {
@@ -123,7 +122,6 @@ mainFSM helpers::processRockblockMessage(
           state.mode = NORMAL;
         }
     }
-
     // success or timeout 
     return SLEEP_READY;
 }
