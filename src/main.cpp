@@ -295,7 +295,7 @@ void Task_main_loop(void *pvParameters) {
       case WAIT_FOR_GPS: {
         bool timeout_test = getRunTime() > GPS_TIME_OUT;
         // update state
-        fsm_state = helpers::update_state_from_gps(
+        fsm_state = helpers::processGpsFix(
           state, gps, getTime(), timeout_test);
         // set read time clock and some output
         if (gps.updated) {

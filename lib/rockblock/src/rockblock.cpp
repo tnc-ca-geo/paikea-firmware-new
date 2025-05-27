@@ -39,7 +39,12 @@ std::map<RockblockStatus, String> statusLabels = {
 };
 
 /*
- * Strsep for multiple character delimiters.
+ * Recreates std::strsep for multiple character delimiters.
+ *
+ * Type-wise we are a little bit on shaky ground here since we are using 
+ * std::string functionality
+ * 
+ * On the other hand we are reproducing a common parser pattern
  */
 char* strsep_multi(char** stringp, const char* delim) {
     if (*stringp == NULL) { return NULL; }
@@ -74,8 +79,10 @@ void extractFrame(char* bfr, char* serialBuffer) {
         bfr[0] = '\0';
         return;
     }
-    len = pos - serialBuffer + strlen(stringConstants[idx]) + 2;
+    len = pos + strlen(stringConstants[idx]) + 2 - serialBuffer;
+    // copy frame
     memcpy(bfr, serialBuffer, len);
+    // remove frame from the head of the Serial buffer
     strcpy(serialBuffer, pos + strlen(stringConstants[idx]) + 2);
 }
 
@@ -165,6 +172,9 @@ void FrameParser::parse(const char* frame) {
     }
     // Our current parse method will generate trailing SEP
     if (pld_idx > SEP_LEN) { strncpy(this->payload, pld, pld_idx-SEP_LEN); }
+    // avoid memory leak from strdup
+    // https://en.cppreference.com/w/c/experimental/dynamic/strdup
+    free(rest);
 }
 
 /*
@@ -353,11 +363,6 @@ void Rockblock::run() {
             ) {
                 if (this->parser.values[0] < 5) {
                     this->queued = false;
-                    // Success output
-                    /* snprintf(bfr, 255, RB_SUCCESS_TEMPLATE,
-                        esp_timer_get_time() / 1E6 - this->start_time,
-                        this->retries, this->signal);
-                    Serial.print(bfr); */
                     // check for incoming message
                     if (this->parser.values[2] == 1) {
                         Serial.println("Message waiting");

@@ -11,6 +11,7 @@ void tearDown() {}
 int runUnityTests() {
     UNITY_BEGIN();
     // test rockblock
+    RUN_TEST(testStrSepMulti);
     RUN_TEST(testExtractFrame);
     RUN_TEST(testParseFrame);
     RUN_TEST(testParseFrameWeirdFrame);

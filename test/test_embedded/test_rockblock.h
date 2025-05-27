@@ -3,6 +3,21 @@
 #include <rockblock.cpp>
 
 
+void testStrSepMulti() {
+    char testData[] = "apples,,oranges,,pears";
+    char* token = nullptr;
+    char* rest = strdup(testData);
+    token = strsep_multi(&rest, ",,");
+    TEST_ASSERT_EQUAL_STRING("apples", token);
+    token = strsep_multi(&rest, ",,");
+    TEST_ASSERT_EQUAL_STRING("oranges", token);
+    token = strsep_multi(&rest, ",,");
+    TEST_ASSERT_EQUAL_STRING("pears", token);
+    token = strsep_multi(&rest, ",,");
+    TEST_ASSERT_NULL(token);
+    free(rest);
+}
+
 void testExtractFrame() {
     TEST_ASSERT_EQUAL_INT(1, 1);
     char testData[] = "AT\r\nOK\r\nAT+NEXT\r\nOK\r\n";

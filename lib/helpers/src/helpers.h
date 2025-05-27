@@ -31,7 +31,7 @@ namespace helpers {
   mainFSM processRockblockMessage(
     systemState &state, char *bfr, time_t runtime, bool success, bool busy);
   // Update state from GPS
-  mainFSM update_state_from_gps(
+  mainFSM processGpsFix(
     systemState &state, Gps &gps, time_t time, bool timeout);
 }
 

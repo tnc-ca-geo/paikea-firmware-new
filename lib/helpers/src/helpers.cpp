@@ -135,7 +135,7 @@ mainFSM helpers::processRockblockMessage(
  * :param bool timeout: Whether to timeout the GPS
  * :return type mainFSM:
  */
-mainFSM helpers::update_state_from_gps(
+mainFSM helpers::processGpsFix(
   systemState &state, Gps &gps, time_t time, bool timeout=false
 ) {
     if (!gps.updated && !timeout) { return WAIT_FOR_GPS; }

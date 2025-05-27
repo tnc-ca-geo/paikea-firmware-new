@@ -69,7 +69,7 @@ class Rockblock {
             uint8_t enable_pin);
         StateMachine state = OFFLINE;
         bool sendSuccess = false;
-        void sendMessage(char *buffer, size_t len=255);
+        void sendMessage(char *buffer, size_t len=255); 
         void getLastIncoming(char *buffer, size_t len=MAX_MESSAGE_SIZE);
         uint8_t getSignalStrength();
         void toggle(bool on=false);
