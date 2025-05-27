@@ -85,7 +85,6 @@ void testPayloadParsingMultipleLines() {
     TEST_ASSERT_EQUAL_STRING("first\r\nsecond", parser.payload);
 }
 
-
 void testPayloadParsingMultipleEmpty() {
     char testData[] =
         "AT+SBDRT\r\n+SBDRT:\r\nfirst\r\n\r\nsecond\r\n\r\nOK\r\n";

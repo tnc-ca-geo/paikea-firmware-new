@@ -208,8 +208,8 @@ void Rockblock::sendMessage(char* bfr, size_t len) {
 };
 
 /*
- * Get incoming message. Incoming message is only available until .sendMessage()
- * called.
+ * Get an incoming message. Incoming message is only available until 
+ * .sendMessage() is called.
  */
 void Rockblock::getLastIncoming(char *bfr, size_t len) {
     strncpy(bfr, this->incoming, MAX_MESSAGE_SIZE-1);

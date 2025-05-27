@@ -1,5 +1,12 @@
 /*
  * Abstract hardware dependencies for native development
+ *
+ * TODO: Native development has not been fully implemented because
+ * of time consuming difficulties. All tests need to run on the 
+ * LilyGO board used in the project, however just the board (peripherials 
+ * not required) should be sufficient for testing.
+ * 
+ * TODO: further abstract to any ESP32 board
  */
 #ifndef __HAL_H__
 #define __HAL_H__

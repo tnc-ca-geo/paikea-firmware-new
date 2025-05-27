@@ -1,5 +1,14 @@
 #include <storage.h>
 
+// treat RTC storage as local vars
+RTC_DATA_ATTR time_t rtc_start = 0;
+RTC_DATA_ATTR time_t rtc_expected_wakeup = 0;
+RTC_DATA_ATTR unsigned int rtc_interval = 600;
+RTC_DATA_ATTR bool rtc_first_run = true;
+RTC_DATA_ATTR unsigned int rtc_retries = 3;
+RTC_DATA_ATTR unsigned int rtc_new_interval = 0;
+RTC_DATA_ATTR unsigned int rtc_sleep = 0;
+RTC_DATA_ATTR messageType rtc_mode = NORMAL;
 
 ScoutStorage::ScoutStorage() {}
 

@@ -26,8 +26,9 @@ std::tuple<uint8_t, uint8_t> Expander::get_port_and_bit(uint8_t pin) {
 /*
  * PRIVATE: Set a single BIT of a BYTE
  *
- * TODO: there is probably a fancier way to do that. Not relying on Arduino
- * predefined functions.
+ * TODO: there is probably a fancier way to do that without using
+ * TODO: Move out of class scope since there is no interval reference
+ * Arduino macros bitSet and bitClear.
  */
 uint8_t Expander::set_bit(uint8_t old_byte, uint8_t pos, bool value) {
     if (value) return bitSet(old_byte, pos);
@@ -41,7 +42,9 @@ uint8_t Expander::read(uint8_t addr) {
     wire->beginTransmission(this->address);
     wire->write(addr);
     wire->endTransmission();
-    wire->requestFrom(this->address, 1);
+    // requestFrom is overloaded and not forcing size_t here causes 
+    // ambiguity warnings
+    wire->requestFrom(this->address, (size_t) 1);
     uint8_t value = wire->read();
     wire->endTransmission();
     return value;

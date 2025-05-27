@@ -1,3 +1,6 @@
+/*
+ * Light weight GPS class relying non Arduino TinyGPS for parsing
+ */
 #ifndef __GPS_H__
 #define __GPS_H__
 #include <Arduino.h>
@@ -5,7 +8,6 @@
 #include <TinyGPSPlus.h>
 // project
 #include <tca95xx.h>
-#include <gps.h>
 
 
 class Gps {
@@ -39,7 +41,6 @@ public:
     void enable();
     void disable();
     void loop();
-    void readln(char *buffer);
 };
 
 #endif /* __GPS_H__ */

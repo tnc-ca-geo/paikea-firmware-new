@@ -159,35 +159,34 @@ void goToSleep() {
  */
 
 /*
- * Blink LED 1 and 0 as simple system indicator.
- * A mutex is needed since the I2C bus is shared with display and I/O expander.
+ * Blink LED 1 and 0 as simple (and only very hard to see) system indicator.
+ * Needs mutex since the I2C bus is shared with display and I/O expander.
  *
- * Use only LED 1 because they cannot be distinguished using the light tube
- *
- * LED1 - Blink after 2000 before GPS fix
- * LED1 - Blink 3s after GPS fix.
- * OFF - Sleep (triggered by resetting the expander in the sleep function)
- *
- * We could use both for better visibility.
+ * Use LED 1 and LED 0 the synchronously because they cannot be distinguished 
+ * from the outside of the enclosure.
+ * 
+ * OFF (sleep, turned off by resetting the expander in the sleep function)
  */
 void Task_blink(void *pvParamaters) {
   bool blink_state = HIGH;
   uint8_t ctr = 0;
   while (true) {
     if (xSemaphoreTake(mutex_i2c, 200) == pdTRUE) {
-      expander.digitalWrite( LED01, blink_state);
+      expander.digitalWrite(LED01, blink_state);
+      expander.digitalWrite(LED00, blink_state);
       xSemaphoreGive(mutex_i2c);
     }
-    uint8_t divider = state.gps_done ? 15 : 3;
-    blink_state = !(ctr % divider);
+    // blink quickly before GPS fix, slowly when attampt sending
+    blink_state = !(ctr % (state.gps_done ? 15 : 3));
     ctr++;
+    // Delay affects blink speed, intervals are multiples of that number
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
 /*
- * DEBUG ONLY: Output part of the state to the LilyGO display. Use mutex for 
- * I2C bus.
+ * DEBUG ONLY: Print state info to the LilyGO display. 
+ * Use mutex to protect I2C bus.
  */
 void Task_display(void *pvParameters) {
   char out_string[44] = {0};
@@ -207,19 +206,20 @@ void Task_display(void *pvParameters) {
 }
 
 /*
- * Running the radio.
+ * Running the Iridium radio loop.
  */
 void Task_rockblock(void *pvParameters) {
-  // Give some time to the task that has been suspended after creation
-  // vTaskDelay( pdMS_TO_TICKS( 100 ) );
   Serial.println("Start radio loop");
+  // Give some time for the peripherials to stabilize.
+  // It might hang up if we start too early
+  vTaskDelay( pdMS_TO_TICKS( 100 ) );
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
   while (true) {
+    vTaskDelay( pdMS_TO_TICKS( 50 ) );
     rockblock.loop();
-    vTaskDelay( pdMS_TO_TICKS( 100 ) );
   }
 }
 
@@ -227,21 +227,18 @@ void Task_rockblock(void *pvParameters) {
  * Run GPS
  */
 void Task_gps(void *pvParameters) {
-  // Give some time to the task that has been suspended after creation
-  // TODO: check whether that makes actually sense
-  // vTaskDelay( pdMS_TO_TICKS( 100 ) );
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     gps.enable();
     xSemaphoreGive(mutex_i2c);
   }
   while(true) {
-    gps.loop();
     vTaskDelay( pdMS_TO_TICKS( 100 ) );
+    gps.loop();
   }
 }
 
 /*
- * DEBUG Task - Displaying time variables for debugging
+ * DEBUG Task - Display time variables for debugging
  * TODO: remove or use DEBUG flag
  */
 void Task_time(void *pvParameters) {
@@ -270,13 +267,18 @@ void Task_main_loop(void *pvParameters) {
 
   while (true) {
 
-    // Go to sleep if peripherials are not powered, only useful when on serial
-    // monitor
+    // Check whether port expander is available by writing and reading to an 
+    // unused port.
+    //
+    // Go to sleep on failure which means peripherals might not be powered. 
+    // This is an important indicator when MC board is connected to a computer 
+    // via USB. This might result in a situation where the MC is powered while 
+    // the peripherials are not.
     if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
       if (!expander.check()) {
-        Serial.println(
-          "\nThe board might be turned OFF. Please turn ON and press RESET.");
-        Serial.println("Going to sleep for now.\n");
+        Serial.println("\nERROR: Board peripherials did not respond.\n"
+          "Please check power/batteries, e.g. turn ON and press RESET.\n"
+          "Going to sleep for now.\n");
         fsm_state = SLEEP_READY;
       };
       xSemaphoreGive(mutex_i2c);
@@ -335,7 +337,9 @@ void Task_main_loop(void *pvParameters) {
           if (state.mode == RETRY) {
             Serial.println("\nRB: Timeout\n");
           } else {
-            Serial.println("\nRB: Send success\n");
+            Serial.println("\nRB: Send success");
+            Serial.print("RB: Incoming message - "); 
+            Serial.println(bfr); Serial.println();
           }
         }
         break;
