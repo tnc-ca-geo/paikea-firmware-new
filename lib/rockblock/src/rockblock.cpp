@@ -60,6 +60,34 @@ char* strsep_multi(char** stringp, const char* delim) {
 }
 
 /*
+ * Convert float to a NMEA formatted string. Could be reused in ScoutMessages
+ */
+size_t float2NmeaNumber(char* bfr, float val, int digits=3) {
+    float whole;
+    float mins = abs(std::modf(val, &whole)) * 60;
+    char sign = (val < 0) ? '-' : '+';
+    if (digits == 2) {
+        return snprintf(bfr, 32, "%c%02.0f%06.3f", sign, abs(whole), mins);
+    } else {
+        return snprintf(bfr, 32, "%c%03.0f%06.3f", sign, abs(whole), mins);
+    }
+}
+
+/*
+ * Create a location Snippet for the SBDIX command. This is somewhat similar
+ * to float2Nmea in Scout messages but the format is also different hence
+ * a single function instead of reusing part of it and creating three functions
+ * that had to be combined in different manners. 
+ */
+size_t getSbdixWithLocation(char* bfr, float lat, float lon) {
+    char latBfr[32] = {0};
+    char lonBfr[32] = {0};
+    float2NmeaNumber(latBfr, lat, 2);
+    float2NmeaNumber(lonBfr, lon, 3);
+    return sniprintf(bfr, 64, "%s=%s,%s", SBDIX_COMMAND, latBfr, lonBfr);
+}
+
+/*
  * Extract a frame by token and remove it from the incoming serialBuffer.
  * bfr[0] will be 0 if no frame extracted. TODO: We could make this slightly
  * more sophisticated in a way that we could not send messages that break the
@@ -193,8 +221,8 @@ Rockblock::Rockblock(AbstractExpander &expander,
  * Send command and wait for response or (timeout)
  */
 void Rockblock::sendCommand(const char* command) {
-    char commandBfr[10] = {0};
-    snprintf(commandBfr, 10, "AT%s\r\n", command);
+    char commandBfr[32] = {0};
+    snprintf(commandBfr, 32, "AT%s\r\n", command);
     if (!this->commandWaiting) {
         this->commandWaiting = true;
         this->serial->print(commandBfr);
@@ -210,12 +238,24 @@ void Rockblock::sendMessage(char* bfr, size_t len) {
     Serial.println("Queue message and delete incoming");
     memset(this->message, 0, MAX_MESSAGE_SIZE);
     memset(this->incoming, 0, MAX_MESSAGE_SIZE);
-    snprintf(this->message, 340, "%s\r", bfr);
+    memset(this->sbidxCommand, 0, 64);
     this->start_time = esp_timer_get_time() / 1E6;
     this->retries = 0;
     this->queued = true;
     this->sendSuccess = false;
+    this->locationAvailable = false;
+    strncpy(this->sbidxCommand, SBDIX_COMMAND, sizeof(SBDIX_COMMAND));
+    snprintf(this->message, 340, "%s\r", bfr);
 };
+
+/*
+ * Queue a message to send with location
+ */
+void Rockblock::sendMessage(char *bfr, float lat, float lon, size_t len) {
+    this->sendMessage(bfr, len);
+    this->locationAvailable = true;
+    getSbdixWithLocation(this->sbidxCommand, lat, lat);
+}; 
 
 /*
  * Get an incoming message. Incoming message is only available until 
@@ -346,7 +386,6 @@ void Rockblock::run() {
                 if (this->parser.values[0] >= SEND_THRESHOLD) {
                     Serial.println(" -> attempt sending");
                     this->state = SENDING;
-                } else {
                     Serial.println(" -> too low to send");
                 }
             }
@@ -354,7 +393,7 @@ void Rockblock::run() {
 
         case SENDING:
             if (ready_for_command) {
-                sendCommand(SBDIX_COMMAND);
+                sendCommand(this->sbidxCommand);
                 this->retries += 1;
             }
             else if (

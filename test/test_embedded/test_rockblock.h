@@ -18,6 +18,30 @@ void testStrSepMulti() {
     free(rest);
 }
 
+void testfloat2NmeaNumber() {
+    char bfr[32] = {0};
+    float2NmeaNumber(bfr, 23.5);
+    TEST_ASSERT_EQUAL_STRING("+02330.000", bfr);
+    float2NmeaNumber(bfr, -23.5);
+    TEST_ASSERT_EQUAL_STRING("-02330.000", bfr);
+    float2NmeaNumber(bfr, 23.55555555);
+    TEST_ASSERT_EQUAL_STRING("+02333.333", bfr);
+    float2NmeaNumber(bfr, -23.55555555);
+    TEST_ASSERT_EQUAL_STRING("-02333.333", bfr);
+    float2NmeaNumber(bfr, 7, 2);
+    TEST_ASSERT_EQUAL_STRING("+0700.000", bfr);
+    float2NmeaNumber(bfr, -3.5, 2);
+    TEST_ASSERT_EQUAL_STRING("-0330.000", bfr);
+};
+
+void testGetSbdixWithLocation() {
+    char bfr[64] = {0};
+    getSbdixWithLocation(bfr, 36.5, -122.65);
+    TEST_ASSERT_EQUAL_STRING("+SBDIX=+3630.000,-12239.000", bfr);
+    getSbdixWithLocation(bfr, 3.5, -1.65);
+    TEST_ASSERT_EQUAL_STRING("+SBDIX=+0330.000,-00139.000", bfr);
+};
+
 void testExtractFrame() {
     TEST_ASSERT_EQUAL_INT(1, 1);
     char testData[] = "AT\r\nOK\r\nAT+NEXT\r\nOK\r\n";

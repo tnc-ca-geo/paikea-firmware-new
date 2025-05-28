@@ -10,7 +10,6 @@
  * Take a float value and return NMEA string for lat and long.
  */
 size_t scoutMessages::float2Nmea(char* bfr, float val, bool latFlag) {
-    size_t ptr;
     float whole;
     float mins = abs(std::modf(val, &whole)) * 60;
     return snprintf(bfr, 32, "%s:%.0f%07.4f,%s",

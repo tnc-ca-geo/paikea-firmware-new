@@ -319,7 +319,7 @@ void Task_main_loop(void *pvParameters) {
           }
           // send message and update FSM
           scoutMessages::createPK101(bfr, state);
-          rockblock.sendMessage(bfr);
+          rockblock.sendMessage(bfr, 5, 10);
         }
         break;
       };

@@ -12,6 +12,8 @@ int runUnityTests() {
     UNITY_BEGIN();
     // test rockblock
     RUN_TEST(testStrSepMulti);
+    RUN_TEST(testfloat2NmeaNumber);
+    RUN_TEST(testGetSbdixWithLocation);
     RUN_TEST(testExtractFrame);
     RUN_TEST(testParseFrame);
     RUN_TEST(testParseFrameWeirdFrame);

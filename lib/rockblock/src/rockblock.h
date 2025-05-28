@@ -60,6 +60,8 @@ class Rockblock {
         bool on = false;
         bool queued = false;
         bool commandWaiting = false;
+        bool locationAvailable = false;
+        char sbidxCommand[64] = {0};
         void readAndAppendResponse();
         void sendCommand(const char *command);
         void run();
@@ -69,8 +71,9 @@ class Rockblock {
             uint8_t enable_pin);
         StateMachine state = OFFLINE;
         bool sendSuccess = false;
-        void sendMessage(char *buffer, size_t len=255); 
-        void getLastIncoming(char *buffer, size_t len=MAX_MESSAGE_SIZE);
+        void sendMessage(char *bfr, size_t len=255); 
+        void sendMessage(char *bfr, float lat, float lon, size_t len=255); 
+        void getLastIncoming(char *bfr, size_t len=MAX_MESSAGE_SIZE);
         uint8_t getSignalStrength();
         void toggle(bool on=false);
         // process loop
