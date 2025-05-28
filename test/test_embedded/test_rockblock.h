@@ -32,7 +32,7 @@ void testfloat2NmeaNumber() {
     TEST_ASSERT_EQUAL_STRING("+0700.000", bfr);
     float2NmeaNumber(bfr, -3.5, 2);
     TEST_ASSERT_EQUAL_STRING("-0330.000", bfr);
-};
+}
 
 void testGetSbdixWithLocation() {
     char bfr[64] = {0};
@@ -40,7 +40,7 @@ void testGetSbdixWithLocation() {
     TEST_ASSERT_EQUAL_STRING("+SBDIX=+3630.000,-12239.000", bfr);
     getSbdixWithLocation(bfr, 3.5, -1.65);
     TEST_ASSERT_EQUAL_STRING("+SBDIX=+0330.000,-00139.000", bfr);
-};
+}
 
 void testExtractFrame() {
     TEST_ASSERT_EQUAL_INT(1, 1);
@@ -113,7 +113,6 @@ void testPayloadParsing() {
     TEST_ASSERT_EQUAL_STRING("AT+SBDRT", parser.command);
     TEST_ASSERT_EQUAL_INT16(1, parser.status);
     TEST_ASSERT_EQUAL_STRING("payload", parser.payload);
-
 }
 
 void testPayloadParsingMultipleLines() {

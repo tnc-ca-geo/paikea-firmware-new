@@ -341,7 +341,7 @@ void Rockblock::run() {
     }
 
     // This is a combination of device status and user workflow
-    bool ready_for_command = (
+    bool readyForCommand = (
         parser.status == WAIT_STATUS && !this->commandWaiting);
 
     // Update state
@@ -349,7 +349,7 @@ void Rockblock::run() {
 
         case OFFLINE:
             if (this->on) {
-                if (ready_for_command) {
+                if (readyForCommand) {
                     // Check whether Rockblock is available and clear MO and MT
                     // buffers
                     sendCommand(SBDD_COMMAND);
@@ -360,7 +360,7 @@ void Rockblock::run() {
             break;
 
         case IDLE:
-            if (ready_for_command && this->queued) {
+            if (readyForCommand && this->queued) {
                 sendCommand(SBDWT_COMMAND);
                 this->state = MESSAGE_WAITING;
             };
@@ -376,7 +376,7 @@ void Rockblock::run() {
             break;
 
         case COM_CHECK:
-            if (ready_for_command) { sendCommand(CSQ_COMMAND); }
+            if (readyForCommand) { sendCommand(CSQ_COMMAND); }
             else if (
                 parser.status == OK_STATUS &&
                 strstr(this->parser.command, CSQ_COMMAND) != nullptr
@@ -392,7 +392,7 @@ void Rockblock::run() {
             break;
 
         case SENDING:
-            if (ready_for_command) {
+            if (readyForCommand) {
                 sendCommand(this->sbidxCommand);
                 this->retries += 1;
             }
@@ -418,7 +418,7 @@ void Rockblock::run() {
             break;
 
         case INCOMING:
-            if (ready_for_command) { sendCommand(SBDRT_COMMAND); }
+            if (readyForCommand) { sendCommand(SBDRT_COMMAND); }
             else if (
                 parser.status == OK_STATUS &&
                 strstr(this->parser.command, SBDRT_COMMAND) != nullptr
