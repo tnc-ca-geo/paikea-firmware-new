@@ -1,9 +1,5 @@
 #include <helpers.h>
 
-#ifndef SYSTEM_TIME_OUT
-#define SYSTEM_TIME_OUT 300
-#endif
-
 /*
  * Calculate wake up time, pegging it to actual time starting at 00:00:00.
  */

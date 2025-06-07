@@ -14,7 +14,7 @@
 // TODO: Determine actual maximum sizes, there is plenty of memory, we can be
 // generous for now.
 #define MAX_COMMAND_SIZE 256
-#define MAX_RESPONSE_SIZE 64
+#define MAX_RESPONSE_SIZE 128
 // This number is from the Rockblock documentation
 #define MAX_MESSAGE_SIZE 340
 #define MAX_FRAME_SIZE 512

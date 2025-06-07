@@ -39,8 +39,15 @@
 
 // printf templates
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds \
-  \n - difference: %ds\n - message type: %s\n"
+  \n - difference: %ds\n - retries: %d\n - message status: %s\n"
+#define ERROR_SLEEP_TEMPLATE ("Going to sleep because of a system error.\n" \
+  "Retry in %d seconds.")
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
+// sleep time if the system did not initialize correctly, e.g. peripherals 
+// not available
+#ifndef ERROR_SLEEP_DIFFERENCE
+#define ERROR_SLEEP_DIFFERENCE 600
+#endif
 
 // would be better in the stateType lib but for some reason there is a weird
 // conflict
@@ -126,17 +133,27 @@ float readBatteryVoltage() {
 }
 
 /*
- * Go to sleep
+ * Go to sleep. If error, we treat this as a reaction to a systen error.
+ *
+ * :params bool error: Whether to go to sleep because of an error.
+ * :return type void:
  */
-void goToSleep() {
+void goToSleep(bool error=false) {
   char bfr[128] = {0};
-  uint32_t difference = helpers::getSleepDifference( state, getTime() );
+  uint32_t difference = ERROR_SLEEP_DIFFERENCE;
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
-  snprintf(
-    bfr, 128, SLEEP_TEMPLATE, state.interval, difference,
-    scoutMessageTypeLabels[state.mode]);
+  if (error) {
+    snprintf(
+      bfr, 128, ERROR_SLEEP_TEMPLATE, difference,
+      scoutMessageTypeLabels[state.mode]);
+  } else {
+    difference = helpers::getSleepDifference( state, getTime() );
+    snprintf(
+      bfr, 128, SLEEP_TEMPLATE, state.interval, difference, state.retries,
+      scoutMessageTypeLabels[state.mode]);
+  }
   Serial.print(bfr);
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
@@ -277,9 +294,8 @@ void Task_main_loop(void *pvParameters) {
     if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
       if (!expander.check()) {
         Serial.println("\nERROR: Board peripherials did not respond.\n"
-          "Please check power/batteries, e.g. turn ON and press RESET.\n"
-          "Going to sleep for now.\n");
-        fsm_state = SLEEP_READY;
+          "Please check power/batteries, e.g. turn ON and press RESET.\n");
+        fsm_state = ERROR_SLEEP;
       };
       xSemaphoreGive(mutex_i2c);
     }
@@ -319,7 +335,7 @@ void Task_main_loop(void *pvParameters) {
           }
           // send message and update FSM
           scoutMessages::createPK101(bfr, state);
-          rockblock.sendMessage(bfr, 5, 10);
+          rockblock.sendMessage(bfr);
         }
         break;
       };
@@ -333,6 +349,20 @@ void Task_main_loop(void *pvParameters) {
         fsm_state = helpers::processRockblockMessage(
           state, bfr, getRunTime(), rockblock.sendSuccess,
           rockblock.state == SENDING || rockblock.state == INCOMING);
+        
+        /* check whether we are timing out
+        if (getRunTime() > SYSTEM_TIME_OUT) {
+          state.mode = RETRY;
+          // check whether retries left
+          if (state.retries > 0) {
+            Serial.println("\nRB: Timeout\n");
+            fsm_state = SLEEP_READY;
+            state.retries--;
+          } else if {
+            state.retries = 3;
+            state.mode = NORMAL;
+          }*/
+
         if (fsm_state == SLEEP_READY) {
           if (state.mode == RETRY) {
             Serial.println("\nRB: Timeout\n");
@@ -345,8 +375,15 @@ void Task_main_loop(void *pvParameters) {
         break;
       };
 
+      // normall sleep
       case SLEEP_READY: {
         goToSleep();
+        break;
+      }
+
+      // Go to sleep because there has been a system error
+      case ERROR_SLEEP: {
+        goToSleep(true);
         break;
       }
 
@@ -403,11 +440,11 @@ void setup() {
   display.begin();
   display.off();
   // Output some useful message
-  Serial.println("\nScout buoy firmware v3.0.2-alpha");
+  Serial.println("\nScout buoy firmware v3.0.3-alpha");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2025\n");
-  Serial.print("reporting time: "); Serial.println(state.interval);
+  Serial.print("reporting interval: "); Serial.println(state.interval);
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);

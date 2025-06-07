@@ -19,6 +19,9 @@
 #ifndef RETRY_INTERVAL
 #define RETRY_INTERVAL 600
 #endif
+#ifndef SYSTEM_TIME_OUT
+  #define SYSTEM_TIME_OUT 300
+#endif
 
 namespace helpers {
   // Calculate wake up time, pegging it to actual time starting at 00:00:00.

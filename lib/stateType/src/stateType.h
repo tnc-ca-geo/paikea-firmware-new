@@ -31,7 +31,8 @@ enum mainFSM {
   WAIT_FOR_GPS,
   WAIT_FOR_RB,
   RB_DONE,
-  SLEEP_READY
+  SLEEP_READY,
+  ERROR_SLEEP
 };
 
 typedef struct {

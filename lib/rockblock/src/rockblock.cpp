@@ -152,7 +152,6 @@ void FrameParser::parse(const char* frame) {
     this->status = WAIT_STATUS;
     // iterate over tokens
     while ( (token = strsep_multi(&rest, LINE_SEP)) != NULL ) {
-
         // get command. Command will be always the first valid line.
         if (idx==0) {
             strncpy(this->command, token, MAX_COMMAND_SIZE);
@@ -386,6 +385,7 @@ void Rockblock::run() {
                 if (this->parser.values[0] >= SEND_THRESHOLD) {
                     Serial.println(" -> attempt sending");
                     this->state = SENDING;
+                } else {
                     Serial.println(" -> too low to send");
                 }
             }

@@ -61,19 +61,21 @@ ird_rts     1     7    0
 #define BATT_R_LOWER 100 // kOhm. lower R11 of voltage divider
 #define BATT_FUDGE 1.1 // everyone seems to add a fudge factor here
 // constants
+// send every 10 mins unless reset
 #define DEFAULT_INTERVAL 600
+// retry after 5 mins if not successful
 #define RETRY_INTERVAL 600
-// time after which system is shutdown no matter what, 5 minutes
-#define SYSTEM_TIME_OUT 300
-// time before we decide that we won't get a fix
+// time after which system is shutdown no matter what, 4 minutes
+#define SYSTEM_TIME_OUT 240
+// time before we decide that we won't get a GPS fix
 #define GPS_TIME_OUT 120
-// time we wake up early (before send time)
-#define GPS_DELAY 20        // IMPLEMENT
 // Maximum regular reporting time, 86400s = 1day
 #define MAXIMUM_INTERVAL 86400  // IMPLEMENT
 // Mininmum sleep time, 5s
 #define MINIMUM_SLEEP 5
 // Maximum sleep time, 259200s = 3 days
 #define MAXIMUM_SLEEP 259200
+// Sleep time on system error
+#define ERROR_SLEEP_DIFFERENCE 600
 
 #endif /* __PINDEFS_H__ */
