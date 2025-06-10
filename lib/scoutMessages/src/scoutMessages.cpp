@@ -55,7 +55,7 @@ size_t scoutMessages::createPK001(char* bfr, const systemState state) {
 }
 
 /*
- * Create an extended PK001 message, as used in firmware development    
+ * Create an extended PK001 message, as used in firmware development
  *
  * Example: PK001;lat:3658.56558,NS:N,lon:12200.87904,EW:W,utc:195257.00,sog:2.371,cog:0,sta:00,batt:3.44,int:10,st:5
  */
@@ -89,7 +89,6 @@ size_t scoutMessages::createPK101(char* bfr, const systemState state) {
     uint32_t sleep = (
         state.new_sleep == 0) ? state.sleep : state.new_sleep;
     uint8_t retries = 3 - state.retries;
-    Serial.print("RETRIES: "); Serial.println(retries);
     return snprintf(
         bfr, 128, "PK101;%s,%s,%s,batt:%.1f,int:%d,sl:%d,st:%d",
         latBfr, lonBfr, timeBfr, state.bat, (uint32_t) interval/60,

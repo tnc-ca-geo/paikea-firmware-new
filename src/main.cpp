@@ -2,21 +2,30 @@
  * Firmware for Scout buoy device.
  *
  * A much simpler firmware for the Scout buoy than the original (v2)
- * MicroPython version by Matt Arcady. We focus on simplicity, timing, 
- * and behavior that is transparent and predictable to the user.
+ * MicroPython version by Matt Arcady. Focusses on simplicity, timing,
+ * and behavior transparent and predictable to the user.
+ *
+ * This firmware is written in C++ using the Arduino framework.
+ * Version 3.0.3
  *
  * https://github.com/tnc-ca-geo/paikea-firmware-new.git
  *
  * falk.schuetzenmeister@tnc.org
  * © The Nature Conservancy 2025
+ *
+ * Future improvements:
+ * - we still relay heavily on third party libraries, sometimes only marginally
+ * we might replace some of them
+ * - we still use Matt Arcady's message types even though in slight variations
+ * - since sending takes quite some time we could keep reading GPS and get cog
+ * and sog
+ * - binary message for shorter and cheaper messages
+ * - fully implement hardware abstraction
+ * - correction factor for known time drift
  * -----------------------------------------------------------------------------
  */
 
-/*
- * We still heavily relay on third party libraries (mostly from the Arduino
- * ecosystsem) that we should replace in the future with your own, IF this code
- * will be widely used in production.
- */
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
@@ -43,14 +52,7 @@
 #define ERROR_SLEEP_TEMPLATE ("Going to sleep because of a system error.\n" \
   "Retry in %d seconds.")
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
-// sleep time if the system did not initialize correctly, e.g. peripherals 
-// not available
-#ifndef ERROR_SLEEP_DIFFERENCE
-#define ERROR_SLEEP_DIFFERENCE 600
-#endif
 
-// would be better in the stateType lib but for some reason there is a weird
-// conflict
 std::map<messageType, String> scoutMessageTypeLabels = {
   {NORMAL, "NORMAL"}, {FIRST, "FIRST"}, {RETRY, "RETRY"},
   {CONFIG, "CONFIG"}, {ERROR, "ERROR"}
@@ -61,11 +63,10 @@ std::map<messageType, String> scoutMessageTypeLabels = {
  */
 // Use to protect I2C shared between display and expander.
 static SemaphoreHandle_t mutex_i2c;
-// Use to protect state object if not atomic, ideally we would modify state
-// object only in one place
+// Use to protect state object if variable update is not atomic, e.g. buffers or
+// long types
 static SemaphoreHandle_t mutex_state;
-// Create TaskhHandles, only needed if the task is deleted or suspended outside
-// of the task itself.
+// Create TaskhHandles, only needed if the task is referenced outside the task
 static TaskHandle_t rockblockTaskHandle = NULL;
 static TaskHandle_t gpsTaskHandle = NULL;
 static TaskHandle_t blinkTaskHandle = NULL;
@@ -105,7 +106,8 @@ time_t getTime() {
 
 /*
  * Set RTC system time. We relay on the ESP32 internal clock to continue timing
- * through deep sleep.
+ * through deep sleep. However, the time drift is remarkable. So far we had only
+ * hardware where the time has been shorter than expected
  */
 void setTime(time_t time) {
   struct timeval new_time = {0};
@@ -126,14 +128,14 @@ float readBatteryVoltage() {
   for (uint8_t i=0; i<10; i++) {
     // devide through 1000 and through 10 for 10 readings
     readings += (float) analogReadMilliVolts(BATT_ADC)/10000;
-    vTaskDelay( pdMS_TO_TICKS( 10 ) );
+    vTaskDelay( pdMS_TO_TICKS( 20 ) );
   }
   // adjust for voltage divider
   return readings * (BATT_R_UPPER + BATT_R_LOWER)/BATT_R_LOWER;
 }
 
 /*
- * Go to sleep. If error, we treat this as a reaction to a systen error.
+ * Go to sleep. If error is true, we treat this as a reaction to a systen error.
  *
  * :params bool error: Whether to go to sleep because of an error.
  * :return type void:
@@ -179,9 +181,9 @@ void goToSleep(bool error=false) {
  * Blink LED 1 and 0 as simple (and only very hard to see) system indicator.
  * Needs mutex since the I2C bus is shared with display and I/O expander.
  *
- * Use LED 1 and LED 0 the synchronously because they cannot be distinguished 
+ * Use LED 1 and LED 0 the synchronously because they cannot be distinguished
  * from the outside of the enclosure.
- * 
+ *
  * OFF (sleep, turned off by resetting the expander in the sleep function)
  */
 void Task_blink(void *pvParamaters) {
@@ -202,7 +204,7 @@ void Task_blink(void *pvParamaters) {
 }
 
 /*
- * DEBUG ONLY: Print state info to the LilyGO display. 
+ * DEBUG ONLY: Print state info to the LilyGO display.
  * Use mutex to protect I2C bus.
  */
 void Task_display(void *pvParameters) {
@@ -223,7 +225,7 @@ void Task_display(void *pvParameters) {
 }
 
 /*
- * Running the Iridium radio loop.
+ * Running the Iridium radio loop once.
  */
 void Task_rockblock(void *pvParameters) {
   Serial.println("Start radio loop");
@@ -284,12 +286,12 @@ void Task_main_loop(void *pvParameters) {
 
   while (true) {
 
-    // Check whether port expander is available by writing and reading to an 
+    // Check whether port expander is available by writing and reading to an
     // unused port.
     //
-    // Go to sleep on failure which means peripherals might not be powered. 
-    // This is an important indicator when MC board is connected to a computer 
-    // via USB. This might result in a situation where the MC is powered while 
+    // Go to sleep on failure which means peripherals might not be powered.
+    // This is an important indicator when MC board is connected to a computer
+    // via USB. This might result in a situation where the MC is powered while
     // the peripherials are not.
     if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
       if (!expander.check()) {
@@ -364,7 +366,7 @@ void Task_main_loop(void *pvParameters) {
             rockblock.state == SENDING || rockblock.state == INCOMING);
           if (fsm_state == SLEEP_READY) {
             Serial.println("\nRB: Send success");
-            Serial.print("RB: Incoming message - "); 
+            Serial.print("RB: Incoming message - ");
             Serial.println(bfr); Serial.println();
           }
         }
@@ -466,12 +468,10 @@ void setup() {
    *  - display
    */
   mutex_i2c = xSemaphoreCreateMutex();
-
   /*
    * Mutex protecting state
    */
   mutex_state = xSemaphoreCreateMutex();
-
   /*
    * Create and start simple tasks.
    */

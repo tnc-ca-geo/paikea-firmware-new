@@ -36,33 +36,33 @@ enum mainFSM {
 };
 
 typedef struct {
-    // timing
-    time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
-    time_t gps_read_time = 0; // time when GPS was read
-    time_t expected_wakeup = 0;
-    uint32_t interval = DEFAULT_INTERVAL; // reporting interval
-    uint32_t sleep = 0;
-    uint8_t retries = 3; // maximal number of retries
-    messageType mode = NORMAL;
-    // state
-    bool gps_done = 0;
-    bool rockblock_done = 0;
-    bool send_success = false;
-    float lat=999;
-    float lng=999;
-    float heading=0;
-    float speed=0; // speed in knots
-    float bat=0;
-    uint8_t signal = 0;
-    // message
-    char message[255] = {0};
-    // requested configuration change
-    uint32_t new_interval = 0;
-    // There is actually no preset sleep (would always be 0) but I still mark
-    // it as new because it belongs in the same category of presets that have
-    // to be stored while sleeping.
-    uint32_t new_sleep = 0;
-    bool config_change_requested = false;
+  // timing
+  time_t start_time = 0; // time when buoy firts powered on (inlcudes sleep times)
+  time_t gps_read_time = 0; // time when GPS was read
+  time_t expected_wakeup = 0;
+  uint32_t interval = DEFAULT_INTERVAL; // reporting interval
+  uint32_t sleep = 0;
+  uint8_t retries = 3; // maximal number of retries
+  messageType mode = NORMAL;
+  // state
+  bool gps_done = 0;
+  bool rockblock_done = 0;
+  bool send_success = false;
+  float lat=999;
+  float lng=999;
+  float heading=0;
+  float speed=0; // speed in knots
+  float bat=0;
+  uint8_t signal = 0;
+  // message
+  char message[255] = {0};
+  // requested configuration change
+  uint32_t new_interval = 0;
+  // There is actually no preset sleep (would always be 0) but I still mark
+  // it as new because it belongs in the same category of presets that have
+  // to be stored while sleeping.
+  uint32_t new_sleep = 0;
+  bool config_change_requested = false;
 } systemState;
 
 #endif

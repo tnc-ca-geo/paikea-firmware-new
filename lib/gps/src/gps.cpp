@@ -6,6 +6,9 @@ Gps::Gps(Expander &expander, HardwareSerial &serial, uint8_t enable_pin) {
     this->enable_pin = enable_pin;
 }
 
+/*
+ * Turn GPS on via port expander
+ */
 void Gps::enable() {
     // flush Serial buffer
     if (this->serial->available()) this->serial->read();
@@ -15,11 +18,17 @@ void Gps::enable() {
     this->start_time = esp_timer_get_time() / 1E6;
 }
 
+/*
+ * Turn GPS off via port expander
+ */
 void Gps::disable() {
     this->enabled = false;
     this->expander->digitalWrite(this->enable_pin, LOW);
 }
 
+/*
+ * Run t
+ */
 void Gps::loop() {
     char character;
     while(this->serial->available()) {

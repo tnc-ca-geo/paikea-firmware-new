@@ -10,6 +10,7 @@ RTC_DATA_ATTR unsigned int rtc_new_interval = 0;
 RTC_DATA_ATTR unsigned int rtc_sleep = 0;
 RTC_DATA_ATTR messageType rtc_mode = NORMAL;
 
+
 ScoutStorage::ScoutStorage() {}
 
 
