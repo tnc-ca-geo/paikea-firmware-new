@@ -341,32 +341,28 @@ void Task_main_loop(void *pvParameters) {
       };
 
       case WAIT_FOR_RB: {
-        // Check for incoming messages
-        rockblock.getLastIncoming(bfr);
-        // Determine next state, systemState will be updated as a side effect
-        // I considered passing a reference to the rockblock instance but
-        // that makes testing harder, therefore passing only select values.
-        fsm_state = helpers::processRockblockMessage(
-          state, bfr, getRunTime(), rockblock.sendSuccess,
-          rockblock.state == SENDING || rockblock.state == INCOMING);
-        
-        /* check whether we are timing out
+        // check whether we are timing out
         if (getRunTime() > SYSTEM_TIME_OUT) {
-          state.mode = RETRY;
           // check whether retries left
+          Serial.println("\nRB: Timeout\n");
           if (state.retries > 0) {
-            Serial.println("\nRB: Timeout\n");
-            fsm_state = SLEEP_READY;
             state.retries--;
-          } else if {
+            state.mode = RETRY;
+          } else {
             state.retries = 3;
             state.mode = NORMAL;
-          }*/
-
-        if (fsm_state == SLEEP_READY) {
-          if (state.mode == RETRY) {
-            Serial.println("\nRB: Timeout\n");
-          } else {
+          }
+          fsm_state = SLEEP_READY;
+        } else {
+          // Check for incoming messages
+          rockblock.getLastIncoming(bfr);
+          // Determine next state, systemState will be updated as a side effect
+          // I considered passing a reference to the rockblock instance but
+          // that makes testing harder, therefore passing only select values.
+          fsm_state = helpers::processRockblockMessage(
+            state, bfr, rockblock.sendSuccess,
+            rockblock.state == SENDING || rockblock.state == INCOMING);
+          if (fsm_state == SLEEP_READY) {
             Serial.println("\nRB: Send success");
             Serial.print("RB: Incoming message - "); 
             Serial.println(bfr); Serial.println();
@@ -375,7 +371,7 @@ void Task_main_loop(void *pvParameters) {
         break;
       };
 
-      // normall sleep
+      // normal sleep
       case SLEEP_READY: {
         goToSleep();
         break;

@@ -77,8 +77,7 @@ uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
  * :return type fsmState
  */
 mainFSM helpers::processRockblockMessage(
-  systemState &state, char *bfr, time_t runtime, bool success=false,
-  bool busy=true
+  systemState &state, char *bfr, bool success=false, bool busy=true
 ) {
   if (!busy) {
     // RB send success
@@ -102,19 +101,6 @@ mainFSM helpers::processRockblockMessage(
         } else {
           state.mode = ERROR;
         }
-      }
-      state.retries = 3;
-      return SLEEP_READY;
-    }
-    // RB timeout
-    if (runtime > SYSTEM_TIME_OUT) {
-      state.mode = RETRY; 
-      // check whether retries left
-      if (state.retries > 0) {
-        state.retries--;
-      } else {
-        state.retries = 3;
-        state.mode = NORMAL;
       }
       return SLEEP_READY;
     }

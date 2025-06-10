@@ -89,7 +89,7 @@ size_t scoutMessages::createPK101(char* bfr, const systemState state) {
     uint32_t sleep = (
         state.new_sleep == 0) ? state.sleep : state.new_sleep;
     uint8_t retries = 3 - state.retries;
-    Serial.print("RETRIES"); Serial.println(retries);
+    Serial.print("RETRIES: "); Serial.println(retries);
     return snprintf(
         bfr, 128, "PK101;%s,%s,%s,batt:%.1f,int:%d,sl:%d,st:%d",
         latBfr, lonBfr, timeBfr, state.bat, (uint32_t) interval/60,

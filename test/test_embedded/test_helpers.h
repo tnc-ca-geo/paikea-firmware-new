@@ -88,15 +88,15 @@ void testUpdateStatefromRbMessage() {
 
     // scenario 1, waiting for send success
     TEST_ASSERT_EQUAL_INT((int) WAIT_FOR_RB,
-        processRockblockMessage(test_state, bfr, 0, false, false));
+        processRockblockMessage(test_state, bfr, false, false));
 
     // scenario 2, still busy
     TEST_ASSERT_EQUAL_INT((int) WAIT_FOR_RB,
-        processRockblockMessage(test_state, bfr, 0, false, true));
+        processRockblockMessage(test_state, bfr, false, true));
 
         // scenario 3, simple success without message
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
@@ -104,35 +104,29 @@ void testUpdateStatefromRbMessage() {
 
     // scenario 4, simple success without message, second run, success should
     // reset retries
-    test_state.retries = 1;
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) NORMAL, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
-    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
 
     // scenario 5, success with interval messsage
-    test_state.retries = 1;
     test_state.interval = 3600;
     strncpy(bfr, "+DATA:PK006,30;\r\n", 32);
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) CONFIG, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(1800, test_state.new_interval);
-    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
 
     // scenario 6, success with interval and sleep message
-    test_state.retries = 1;
     test_state.interval = 60;
     strncpy(bfr, "+DATA:PK007,7200;\r\n", 32);
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) CONFIG, test_state.mode);
     TEST_ASSERT_EQUAL_INT(600, test_state.interval);
     TEST_ASSERT_EQUAL_INT(7200, test_state.new_sleep);
-    TEST_ASSERT_EQUAL_INT(3, test_state.retries);
 
     // scenario 7, nonsensical message
     test_state.retries = 1;
@@ -141,9 +135,9 @@ void testUpdateStatefromRbMessage() {
     test_state.mode = NORMAL;
     test_state.gps_done = true;
     test_state.interval = 1200;
-    strncpy(bfr, "NONSENSE;\r\n", 32); 
+    strncpy(bfr, "NONSENSE;\r\n", 32);
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) ERROR, test_state.mode);
     TEST_ASSERT_EQUAL_INT(1200, test_state.interval);
     TEST_ASSERT_EQUAL_INT(0, test_state.new_interval);
@@ -156,9 +150,9 @@ void testUpdateStatefromRbMessage() {
     test_state.mode = NORMAL;
     test_state.gps_done = true;
     test_state.interval = 1200;
-    strncpy(bfr, "+DATA:PK006,2000;\r\n", 32); 
+    strncpy(bfr, "+DATA:PK006,2000;\r\n", 32);
     TEST_ASSERT_EQUAL_INT((int) SLEEP_READY,
-        processRockblockMessage(test_state, bfr, 0, true, false));
+        processRockblockMessage(test_state, bfr, true, false));
     TEST_ASSERT_EQUAL_INT((int) ERROR, test_state.mode);
     TEST_ASSERT_EQUAL_INT(1200, test_state.interval);
 }

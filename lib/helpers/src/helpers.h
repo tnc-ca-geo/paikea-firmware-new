@@ -32,7 +32,7 @@ namespace helpers {
   uint32_t getSleepDifference(systemState &state, const time_t now);
   // Update state from incoming message
   mainFSM processRockblockMessage(
-    systemState &state, char *bfr, time_t runtime, bool success, bool busy);
+    systemState &state, char *bfr, bool success, bool busy);
   // Update state from GPS
   mainFSM processGpsFix(
     systemState &state, Gps &gps, time_t time, bool timeout);
