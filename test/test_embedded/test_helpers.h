@@ -8,10 +8,25 @@
 using namespace helpers;
 
 void testGetNextWakeupTime() {
-    // test 10 min interval
-    TEST_ASSERT_EQUAL_INT(1E9 + 200, getNextWakeupTime(1E9, 600)); // Sunday, September 9, 2001 1:50:00 AM
-    // test 3 hour interval
-    TEST_ASSERT_EQUAL_INT(1E9 + 4400, getNextWakeupTime(1E9, 10800)); // Sunday, September 9, 2001 3:00:00 AM
+    // 1E9 = Sunday, September 9, 2001 1:46:40 AM
+    // test 10 min interval, // Sunday, September 9, 2001 1:50:00 AM
+    TEST_ASSERT_EQUAL_INT(1E9 + 200, getNextWakeupTime(1E9, 600));
+    // test 3 hour interval, // Sunday, September 9, 2001 3:00:00 AM
+    TEST_ASSERT_EQUAL_INT(1E9 + 4400, getNextWakeupTime(1E9, 10800));
+    // test 13 hour interval, should report at 1300 and 0000
+    // Sunday, September 9, 2001 1:00:00 PM
+    TEST_ASSERT_EQUAL_INT(1E9 + 40400, getNextWakeupTime(1E9, 46800));
+    // Sunday, September 10, 2001 12:00:00 AM
+    TEST_ASSERT_EQUAL_INT(1E9 + 80000, getNextWakeupTime(1E9 + 50000, 46800));
+    // test just under 24 hour interval
+    TEST_ASSERT_EQUAL_INT(
+      1E9 + 79999, getNextWakeupTime(999993600, 24 * 3600-1));
+    // test 24 hour interval, should report 0000,
+    TEST_ASSERT_EQUAL_INT(
+      1E9 + 80000, getNextWakeupTime(999993600, 24 * 3600+1));
+    // test 25 hour interval, should report 0000,
+    TEST_ASSERT_EQUAL_INT(
+      1E9 + 80000, getNextWakeupTime(999993600, 25 * 3600));
 };
 
 void testGetSleepDifference() {
@@ -66,7 +81,7 @@ void testGetSleepDifference() {
       TEST_ASSERT_EQUAL_INT(720, getSleepDifference(test_state, now));
       TEST_ASSERT_EQUAL_INT(test_state.retries, 3);
       TEST_ASSERT_EQUAL_INT(1E9 + 800, test_state.expected_wakeup);
-    } 
+    }
 
     // scenario 6: long interval, no success
     {

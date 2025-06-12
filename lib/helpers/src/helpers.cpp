@@ -1,12 +1,21 @@
 #include <helpers.h>
 
+#define SECS_IN_A_DAY 86400
+
 /*
  * Calculate wake up time, pegging it to actual time starting at 00:00:00.
+ * We are currently not allowing reporting intervals over 24 hours. This
+ * function will return next midnight as a maximum.
  */
 time_t helpers::getNextWakeupTime(time_t now, unsigned int delay) {
-  time_t full_day = int(now/86400) * 86400;
-  uint16_t cycles = int(now % 86400/delay);
-  return full_day + (cycles + 1) * delay;
+  time_t full_day = int(now/SECS_IN_A_DAY) * SECS_IN_A_DAY;
+  uint16_t cycles = int(now % SECS_IN_A_DAY/delay);
+  time_t time = full_day + (cycles + 1) * delay;
+  if (time > full_day + SECS_IN_A_DAY) {
+    return full_day + SECS_IN_A_DAY;
+  } else {
+    return time;
+  }
 }
 
 /*

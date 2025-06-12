@@ -388,13 +388,12 @@ void Task_main_loop(void *pvParameters) {
 
 /*
  * Hard timeout to recover a hangup system. Consider this a gentle watchdog
- * able to turn off peripherials. Hopefully this will never be triggered,
- * graceful timeout handled by the main task.
+ * able to turn off peripherials. Hopefully this will never be triggered.
+ * Graceful timeout will be handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
   while (true) {
-    // Give it an extra 20 seconds in hope we catch this gracefully before
-    // shutdown
+    // Give it an extra 20 seconds so that we can catch timeout gracefully.
     if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
       char bfr[64] = {0};
       snprintf(bfr, 64, "HARD TIMEOUT after %d seconds", SYSTEM_TIME_OUT + 20);
