@@ -23,46 +23,33 @@ void helpers::printTime(const time_t time) {
  * corrected to NORMAL if we there is no time for retry.
  */
 uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
-
   // Make sure that the new time is not the same as the old time
   time_t reference = (state.gps_read_time > state.expected_wakeup) ?
     state.gps_read_time : state.expected_wakeup + 1;
-
-  // Calculate time for wakeup, retry, and sleep
-  time_t wakeUp = getNextWakeupTime(reference, state.interval);
+  // Calculate times for wakeup, and retry
+  time_t regularWakeup = getNextWakeupTime(reference, state.interval);
   time_t retryWakeup = getNextWakeupTime(reference, RETRY_INTERVAL);
-
-  // Set mode to normal if retry time is over
-  if ( state.mode == RETRY ) {
-    if (retryWakeup + SYSTEM_TIME_OUT < wakeUp) { wakeUp = retryWakeup; }
-    // no time for retries left
-    else {
-      state.retries = 3;
-      state.mode = NORMAL;
-    }
+  time_t wakeUp = 0;
+  // Use retry time if earlier than next normal time if retries left
+  if ( state.retry && retryWakeup + SYSTEM_TIME_OUT < regularWakeup) {
+    wakeUp = retryWakeup;
+  } else {
+    wakeUp = regularWakeup;
+    state.retries = 3;
   }
-
   // We still have to calculate from now, this could be potentially negative
   // and will be corrected below
   int32_t difference = wakeUp - now;
-  // Use MINIMUM sleep time we meassage triggers feedback: config change confirmation
-  // or error message
-  if (state.mode == CONFIG || state.mode == ERROR) { difference = MINIMUM_SLEEP; }
+  // Use MINIMUM sleep time if meassages trigger feedback: config change
+  // confirmation or error message
+  if (state.config_change_requested) { difference = MINIMUM_SLEEP; }
   // Sleep time takes precidence
   if (state.sleep != 0) { difference = state.sleep; }
-  /* Serial.print("interval: "); Serial.println(state.interval);
-  Serial.print("retry time: "); Serial.println(RETRY_INTERVAL);
-  Serial.print("\nreference time (gps): "); printTime( reference );
-  Serial.print("\nnow: "); printTime(now);
-  Serial.print("\nwakeup time: "); printTime(wakeUp);
-  Serial.print("\ndifference: "); Serial.println(difference);
-  Serial.print("retries left: "); Serial.println(state.retries);
-  Serial.println(); */
   // set minimum sleep time, to ensure we wake up
   difference = ( difference < MINIMUM_SLEEP ) ? MINIMUM_SLEEP : difference;
   // Sleep time is 3 days maximum
   difference = ( difference > MAXIMUM_SLEEP ) ? MAXIMUM_SLEEP : difference;
-  // store expected wakeup to account for clock drift later
+  // store expected wakeup to account for clock drift later (not implemented)
   state.expected_wakeup = now + difference;
   return difference;
 }
@@ -92,6 +79,7 @@ mainFSM helpers::processRockblockMessage(
       if (state.new_sleep != 0) {
         state.sleep = state.new_sleep;
         state.new_sleep = 0;
+        state.mode = WAKE_UP;
       }
       // process incoming message, when available
       if (bfr[0] != '\0') {
@@ -101,6 +89,9 @@ mainFSM helpers::processRockblockMessage(
         } else {
           state.mode = ERROR;
         }
+        // we are using this to determine whether we should send immediately
+        // on the first try
+        state.config_change_requested = true;
       }
       return SLEEP_READY;
     }

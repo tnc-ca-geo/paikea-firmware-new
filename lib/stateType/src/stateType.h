@@ -18,7 +18,7 @@
 enum messageType {
   NORMAL,
   FIRST,
-  RETRY,
+  WAKE_UP,
   CONFIG,
   ERROR // a retry message could be a config message at the same time
 };
@@ -48,6 +48,7 @@ typedef struct {
   bool gps_done = 0;
   bool rockblock_done = 0;
   bool send_success = false;
+  bool retry = false;
   float lat=999;
   float lng=999;
   float heading=0;

@@ -62,7 +62,7 @@ void test_createPK101() {
   state.interval = 600; // internally we are using seconds but minutes in messages
   state.new_interval = 0;
   state.sleep = 0;
-  state.mode = RETRY;
+  state.mode = WAKE_UP;
   createPK101(bfr, state);
   TEST_ASSERT_EQUAL_STRING(
     "PK101;lat:3530.0000,NS:N,lon:12200.0000,EW:W,utc:191049,"

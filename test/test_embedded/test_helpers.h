@@ -66,14 +66,15 @@ void testGetSleepDifference() {
       TEST_ASSERT_EQUAL_INT(720, getSleepDifference(test_state, now));
       TEST_ASSERT_EQUAL_INT(test_state.retries, 3);
       TEST_ASSERT_EQUAL_INT(1E9 + 800, test_state.expected_wakeup);
-    }
+    } 
 
     // scenario 6: long interval, no success
     {
       systemState test_state;
       test_state.gps_read_time = 1E9 + 20; // September 9, 2001 1:47:00 AM
       test_state.interval = 1800;
-      test_state.mode = RETRY;
+      test_state.retry = true;
+      // test_state.mode = WAKE_UP;
       TEST_ASSERT_EQUAL_INT(120, getSleepDifference(test_state, 1E9 + 80));
       TEST_ASSERT_EQUAL_INT(1E9 + 200, test_state.expected_wakeup);
     }

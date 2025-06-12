@@ -42,9 +42,8 @@
 #include <helpers.h>
 
 // debug flags
-#define DEBUG 1
-#define SLEEP 1
-#define USE_DISPLAY 1
+#define DEBUG 0
+#define USE_DISPLAY 0
 
 // printf templates
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds \
@@ -54,7 +53,7 @@
 #define GPS_MESSAGE_TEMPLATE "GPS updated: %.05f, %.05f after %d seconds\n"
 
 std::map<messageType, String> scoutMessageTypeLabels = {
-  {NORMAL, "NORMAL"}, {FIRST, "FIRST"}, {RETRY, "RETRY"},
+  {NORMAL, "NORMAL"}, {FIRST, "FIRST"}, {WAKE_UP, "SLEEP WAKE UP"},
   {CONFIG, "CONFIG"}, {ERROR, "ERROR"}
 };
 
@@ -228,6 +227,8 @@ void Task_display(void *pvParameters) {
  * Running the Iridium radio loop once.
  */
 void Task_rockblock(void *pvParameters) {
+  // Give it some time to be suspended
+  vTaskDelay( pdMS_TO_TICKS( 100 ) );
   Serial.println("Start radio loop");
   // Give some time for the peripherials to stabilize.
   // It might hang up if we start too early
@@ -258,7 +259,6 @@ void Task_gps(void *pvParameters) {
 
 /*
  * DEBUG Task - Display time variables for debugging
- * TODO: remove or use DEBUG flag
  */
 void Task_time(void *pvParameters) {
   while (true) {
@@ -277,7 +277,7 @@ void Task_time(void *pvParameters) {
  */
 void Task_main_loop(void *pvParameters) {
   // setup
-  mainFSM fsm_state = AWAKE;
+  mainFSM fsmState = AWAKE;
   // use as needed
   char bfr[255] = {0};
   // use for timed action or output in increaments of 100ms, e.g. while waiting
@@ -297,23 +297,23 @@ void Task_main_loop(void *pvParameters) {
       if (!expander.check()) {
         Serial.println("\nERROR: Board peripherials did not respond.\n"
           "Please check power/batteries, e.g. turn ON and press RESET.\n");
-        fsm_state = ERROR_SLEEP;
+        fsmState = ERROR_SLEEP;
       };
       xSemaphoreGive(mutex_i2c);
     }
 
-    switch (fsm_state) {
+    switch (fsmState) {
 
       case AWAKE: {
         vTaskResume( gpsTaskHandle );
-        fsm_state = WAIT_FOR_GPS;
+        fsmState = WAIT_FOR_GPS;
         break;
       }
 
       case WAIT_FOR_GPS: {
         bool timeout_test = getRunTime() > GPS_TIME_OUT;
         // update state
-        fsm_state = helpers::processGpsFix(
+        fsmState = helpers::processGpsFix(
           state, gps, getTime(), timeout_test);
         // set read time clock and some output
         if (gps.updated) {
@@ -325,7 +325,7 @@ void Task_main_loop(void *pvParameters) {
         } else if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
 
         // State transitions affecting hardware and queue message
-        if (fsm_state == WAIT_FOR_RB) {
+        if (fsmState == WAIT_FOR_RB) {
           // stop GPS
           vTaskDelete(gpsTaskHandle);
           // start Rockblock
@@ -345,26 +345,21 @@ void Task_main_loop(void *pvParameters) {
       case WAIT_FOR_RB: {
         // check whether we are timing out
         if (getRunTime() > SYSTEM_TIME_OUT) {
-          // check whether retries left
           Serial.println("\nRB: Timeout\n");
-          if (state.retries > 0) {
-            state.retries--;
-            state.mode = RETRY;
-          } else {
-            state.retries = 3;
-            state.mode = NORMAL;
-          }
-          fsm_state = SLEEP_READY;
+          state.retries--;
+          state.retry = state.retries > 0;
+          fsmState = SLEEP_READY;
         } else {
           // Check for incoming messages
           rockblock.getLastIncoming(bfr);
           // Determine next state, systemState will be updated as a side effect
           // I considered passing a reference to the rockblock instance but
           // that makes testing harder, therefore passing only select values.
-          fsm_state = helpers::processRockblockMessage(
+          fsmState = helpers::processRockblockMessage(
             state, bfr, rockblock.sendSuccess,
             rockblock.state == SENDING || rockblock.state == INCOMING);
-          if (fsm_state == SLEEP_READY) {
+          if (fsmState == SLEEP_READY) {
+            state.retries = 3;
             Serial.println("\nRB: Send success");
             Serial.print("RB: Incoming message - ");
             Serial.println(bfr); Serial.println();
@@ -486,8 +481,10 @@ void setup() {
   xTaskCreate(&Task_main_loop, "Task main loop", 4096, NULL, 10, NULL);
   xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10, NULL);
 #if DEBUG
-  // xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
-  // xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
+  xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
+#endif
+#if USE_DISPLAY
+  xTaskCreate(&Task_display, "Task display", 4096, NULL, 9, NULL);
 #endif
 }
 
