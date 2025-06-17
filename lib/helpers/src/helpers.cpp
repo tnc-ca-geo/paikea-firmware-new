@@ -121,14 +121,23 @@ mainFSM helpers::processGpsFix(
   systemState &state, Gps &gps, time_t time, bool timeout=false
 ) {
     if (!gps.updated && !timeout) { return WAIT_FOR_GPS; }
-    state.lat = gps.lat;
-    state.lng = gps.lng;
-    state.heading = gps.heading;
-    state.speed = gps.speed;
-    state.gps_done = true;
-    state.gps_read_time = gps.get_corrected_epoch();
-    if (state.start_time == 0) {
-      state.start_time = gps.get_corrected_epoch() - time;
+    if (gps.updated) {
+      state.lat = gps.lat;
+      state.lng = gps.lng;
+      state.heading = gps.heading;
+      state.speed = gps.speed;
+      state.gps_read_time = gps.get_corrected_epoch();
+      if (state.start_time == 0) {
+        state.start_time = gps.get_corrected_epoch() - time;
+      }
     }
+    if (timeout) {
+      state.lat = 999;
+      state.lng = 999;
+      state.heading = 0;
+      state.speed = 0;
+      state.gps_read_time = time;
+    }
+    state.gps_done = true;
     return WAIT_FOR_RB;
 }

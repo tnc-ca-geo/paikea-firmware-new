@@ -6,7 +6,7 @@
  * and behavior transparent and predictable to the user.
  *
  * This firmware is written in C++ using the Arduino framework.
- * Version 3.0.3
+ * Version 3.1.0
  *
  * https://github.com/tnc-ca-geo/paikea-firmware-new.git
  *
@@ -145,17 +145,6 @@ void goToSleep(bool error=false) {
   // Store data needed on wakeup
   storage.store( state );
   // Output a message before sleeping
-  if (error) {
-    snprintf(
-      bfr, 128, ERROR_SLEEP_TEMPLATE, difference,
-      scoutMessageTypeLabels[state.mode]);
-  } else {
-    difference = helpers::getSleepDifference( state, getTime() );
-    snprintf(
-      bfr, 128, SLEEP_TEMPLATE, state.interval, difference, state.retries,
-      scoutMessageTypeLabels[state.mode]);
-  }
-  Serial.print(bfr);
   if ( xSemaphoreTake(mutex_i2c, 1000) == pdTRUE ) {
     // Clear display, since we don't want to show anything while sleeping
     display.off();
@@ -168,6 +157,20 @@ void goToSleep(bool error=false) {
     rockblock.toggle(false);
     xSemaphoreGive(mutex_i2c);
   }
+  if (error) {
+    snprintf(
+      bfr, 128, ERROR_SLEEP_TEMPLATE, difference,
+      scoutMessageTypeLabels[state.mode]);
+  } else {
+    difference = helpers::getSleepDifference( state, getTime() );
+    snprintf(
+      bfr, 128, SLEEP_TEMPLATE, state.interval, difference, state.retries,
+      scoutMessageTypeLabels[state.mode]);
+  }
+  Serial.println(bfr);
+  Serial.print("Expected wakeup (UTC): ");
+  strftime(bfr, 32, "%F %T", gmtime(&state.expected_wakeup));
+  Serial.println(bfr);
   esp_sleep_enable_timer_wakeup( difference * 1E6 );
   esp_deep_sleep_start();
 }
@@ -282,7 +285,7 @@ void Task_main_loop(void *pvParameters) {
   char bfr[255] = {0};
   // use for timed action or output in increaments of 100ms, e.g. while waiting
   // for state change
-  uint8_t ctr = 0;
+  uint16_t ctr = 0;
 
   while (true) {
 
@@ -321,7 +324,8 @@ void Task_main_loop(void *pvParameters) {
           snprintf(bfr, 255, GPS_MESSAGE_TEMPLATE, state.lat, state.lng,
             getRunTime());
           Serial.println(bfr);
-        } else if (timeout_test) { Serial.println( "GPS: Timeout." );
+        } else if (timeout_test) {
+          Serial.println( "GPS: Timeout." );
         } else if (ctr % 50 == 0) { Serial.println("GPS: Waiting for fix."); }
 
         // State transitions affecting hardware and queue message
@@ -432,7 +436,7 @@ void setup() {
   display.begin();
   display.off();
   // Output some useful message
-  Serial.println("\nScout buoy firmware v3.0.3-alpha");
+  Serial.println("\nScout buoy firmware v3.1.0");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2025\n");
