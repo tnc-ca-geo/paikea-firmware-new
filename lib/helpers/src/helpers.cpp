@@ -32,9 +32,11 @@ void helpers::printTime(const time_t time) {
  * corrected to NORMAL if we there is no time for retry.
  */
 uint32_t helpers::getSleepDifference(systemState &state, const time_t now) {
-  // Make sure that the new time is not the same as the old time
+  // Make sure that the new time is not the same as the old time, we substract
+  // 1 from the alternative time to account for state.gps_read_time being
+  // exactly on the time
   time_t reference = (state.gps_read_time > state.expected_wakeup) ?
-    state.gps_read_time : state.expected_wakeup + 1;
+    state.gps_read_time : state.gps_read_time + state.interval - 1;
   // Calculate times for wakeup, and retry
   time_t regularWakeup = getNextWakeupTime(reference, state.interval);
   time_t retryWakeup = getNextWakeupTime(reference, RETRY_INTERVAL);
