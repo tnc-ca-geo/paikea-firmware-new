@@ -436,7 +436,7 @@ void setup() {
   display.begin();
   display.off();
   // Output some useful message
-  Serial.println("\nScout buoy firmware v3.1.0");
+  Serial.println("\nScout buoy firmware v3.1.0-beta");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2025\n");
