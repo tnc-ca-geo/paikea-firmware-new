@@ -20,7 +20,7 @@
 #define RETRY_INTERVAL 600
 #endif
 #ifndef SYSTEM_TIME_OUT
-  #define SYSTEM_TIME_OUT 300
+  #define SYSTEM_TIME_OUT 540
 #endif
 
 namespace helpers {
