@@ -6,7 +6,7 @@
  * and behavior transparent and predictable to the user.
  *
  * This firmware is written in C++ using the Arduino framework.
- * Version 3.1.0
+ * Version 3.1.1-beta
  *
  * https://github.com/tnc-ca-geo/paikea-firmware-new.git
  *
@@ -436,7 +436,7 @@ void setup() {
   display.begin();
   display.off();
   // Output some useful message
-  Serial.println("\nScout buoy firmware v3.1.0-beta");
+  Serial.println("\nScout buoy firmware v3.1.1-beta");
   Serial.println("https://github.com/tnc-ca-geo/paikea-firmware-new");
   Serial.println("falk.schuetzenmeister@tnc.org");
   Serial.println("\n© The Nature Conservancy 2025\n");

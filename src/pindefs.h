@@ -63,9 +63,9 @@ ird_rts     1     7    0
 // constants
 // send every 10 mins unless reset
 #define DEFAULT_INTERVAL 600
-// retry after 5 mins if not successful
+// retry after 10 mins if not successful
 #define RETRY_INTERVAL 600
-// time after which system is shutdown no matter what, 4 minutes
+// time after which system is shutdown no matter what, 9 minutes
 #define SYSTEM_TIME_OUT 540
 // time before we decide that we won't get a GPS fix
 #define GPS_TIME_OUT 360
