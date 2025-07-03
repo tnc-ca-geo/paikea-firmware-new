@@ -186,10 +186,12 @@ def main(args:argparse.Namespace) -> None:
         f'scheduled tx interval: {args.interval} minutes\n'
         f'minimum surface duration: {args.minimum_surface} minutes\n'
         f'maximum surface duration: {args.maximum_surface} minutes\n'
-        f'minimum dive duration: {args.maximum_dive} minutes\n'
+        f'minimum dive duration: {args.minimum_dive} minutes\n'
         f'maximum dive duration: {args.maximum_dive} minutes\n'
         f'gps timeout in minutes: {args.gps_timeout} minutes\n'
         f'required process time: {args.process_time} minutes\n'
+        'likelihood of send success above the surface: '
+        f'{args.surface_success_odds*100:.0f}%\n'
         '\nResults:\n'
         '-------\n'
         f'total tx tries: {len(tx_results)}\n'
@@ -215,10 +217,10 @@ if __name__ == '__main__':
         '-i', '--interval', type=int, default=10,
         help='Tx interval in minutes (default=10)')
     parser.add_argument(
-        '-m', '--minimum_dive', type=int, default=4,
+        '-m', '--minimum_dive', type=int, default=1,
         help='Assumed minimum dive duration in minutes (default=1)')
     parser.add_argument(
-        '-x', '--maximum_dive', type=int, default=7,
+        '-x', '--maximum_dive', type=int, default=12,
         help='Assumed maximum dive duration in minutes (default=12)')
     parser.add_argument(
         '-s', '--minimum_surface', type=int, default=1,
@@ -227,12 +229,12 @@ if __name__ == '__main__':
         '-k', '--maximum_surface', type=int, default=5,
         help='Assumed maximum surface time in minutes (default=5)')
     parser.add_argument(
-        '-o', '--surface_success_odds', type=float, default=.9,
+        '-o', '--surface_success_odds', type=float, default=.8,
         help='Odds of successful transmission while on surface (default=0.8)')
     parser.add_argument(
-        '-t', '--gps_timeout', type=int, default=6,
-        help='Timeout for GPS in minutes (default=6)')
+        '-t', '--gps_timeout', type=int, default=5,
+        help='Timeout for GPS in minutes (default=5)')
     parser.add_argument(
         '-p', '--process_time', type=int, default=2,
-        help='Minimum process time for successful send in minutes (default=3)')
+        help='Minimum process time for successful send in minutes (default=2)')
     main(parser.parse_args())
