@@ -14,15 +14,17 @@ import matplotlib.pyplot as plt
 
 
 def get_cycles(
-    sequence_length:int, dive_min:int, dive_max:int, surface_duration:int
+    sequence_length:int, dive_min:int, dive_max:int, surface_min:int,
+    surface_max:int
 ) -> list[tuple[float, float, str]]:
     """
     Randomly generate a sequence of diving and surfacing.
 
     :params int sequence_length: Duration of the requested sequence
     :params int dive_min: Assumed minimum dive time
-    :params ind dive_max: Assumed maximum dive time
-    :params surface_duration: Assumed minimum surface duration
+    :params int dive_max: Assumed maximum dive time
+    :params int surface_min: Assumed minimum surface duration
+    :params int surface_max: Assumed minimum surface duration
     :return type list[tuple[float, float, str]]:
     """
     dive = random.random() > .5
@@ -35,14 +37,13 @@ def get_cycles(
             duration = np.random.uniform(dive_start, dive_max)
             cycle_times.append((time_pointer, time_pointer + duration, 'dive'))
         else:
-            surface_start = 0 if first else surface_duration
-            duration = np.random.uniform(surface_start, surface_duration)
+            surface_start = 0 if first else surface_min
+            duration = np.random.uniform(surface_start, surface_max)
             cycle_times.append((
                 time_pointer, time_pointer + duration, 'surface'))
         time_pointer += duration
         dive = not dive
         first = False
-    # end sequence at the end of requested times
     cycle_times[-1] = (cycle_times[-1][0], sequence_length, cycle_times[-1][2])
     return cycle_times
 
@@ -66,8 +67,7 @@ def get_overlap(
     # Check if there is an actual overlap
     if overlap_start < overlap_end:
         return (overlap_start, overlap_end)
-    else:
-        return None  # No overlap
+    return None  # No overlap
 
 
 def get_tx_results(
@@ -118,7 +118,8 @@ def analyze(tx_results:[list[tuple[float, str]]]) -> tuple[float, float]:
     """
     # Analyze effective transmission rate
     num_success = sum(1 for tx, _, result in tx_results if result == 'success')
-    return num_success
+    active = sum(tx_end-tx_start for tx_start, tx_end, _ in tx_results)
+    return num_success, active
 
 
 def plot_results(
@@ -172,24 +173,28 @@ def main(args:argparse.Namespace) -> None:
     print(__doc__)
     cycles = get_cycles(
         args.duration, args.minimum_dive, args.maximum_dive,
-        args.minimum_surface)
+        args.minimum_surface, args.maximum_surface)
     tx_results = get_tx_results(
         cycles, args.interval, args.surface_success_odds, args.gps_timeout,
         args.process_time)
-    num_successes = analyze(tx_results)
+    num_successes, active = analyze(tx_results)
     effective_tx_rate = args.duration/num_successes if num_successes else None
     print(
         'Assumptions:\n'
         '------------\n'
         f'simulation duration: {args.duration/60:.1f} hours\n'
         f'scheduled tx interval: {args.interval} minutes\n'
-        f'surface duration: {args.minimum_surface} minutes\n'
+        f'minimum surface duration: {args.minimum_surface} minutes\n'
+        f'maximum surface duration: {args.maximum_surface} minutes\n'
         f'minimum dive duration: {args.maximum_dive} minutes\n'
         f'maximum dive duration: {args.maximum_dive} minutes\n'
+        f'gps timeout in minutes: {args.gps_timeout} minutes\n'
+        f'required process time: {args.process_time} minutes\n'
         '\nResults:\n'
         '-------\n'
         f'total tx tries: {len(tx_results)}\n'
-        f'successful tx: {num_successes}')
+        f'successful tx: {num_successes}\n'
+        f'active time (no sleep): {int(active/args.duration*100)}%')
     if effective_tx_rate:
         print(
             f'Effective tx rate: {effective_tx_rate:.1f} '
@@ -211,13 +216,16 @@ if __name__ == '__main__':
         help='Tx interval in minutes (default=10)')
     parser.add_argument(
         '-m', '--minimum_dive', type=int, default=4,
-        help='Assumed minimum dive duration in minutes (default=4)')
+        help='Assumed minimum dive duration in minutes (default=1)')
     parser.add_argument(
         '-x', '--maximum_dive', type=int, default=7,
-        help='Assumed maximum dive duration in minutes (default=7)')
+        help='Assumed maximum dive duration in minutes (default=12)')
     parser.add_argument(
-        '-s', '--minimum_surface', type=int, default=3,
-        help='Assumed minimum surface time in minutes (default=3)')
+        '-s', '--minimum_surface', type=int, default=1,
+        help='Assumed minimum surface time in minutes (default=1)')
+    parser.add_argument(
+        '-k', '--maximum_surface', type=int, default=5,
+        help='Assumed maximum surface time in minutes (default=5)')
     parser.add_argument(
         '-o', '--surface_success_odds', type=float, default=.9,
         help='Odds of successful transmission while on surface (default=0.8)')
