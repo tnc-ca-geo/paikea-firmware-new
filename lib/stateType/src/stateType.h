@@ -64,6 +64,7 @@ typedef struct {
   // to be stored while sleeping.
   uint32_t new_sleep = 0;
   bool config_change_requested = false;
+  bool first_run = true;
 } systemState;
 
 #endif

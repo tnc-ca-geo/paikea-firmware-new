@@ -24,11 +24,17 @@
  * - correction factor for known time drift
  * -----------------------------------------------------------------------------
  */
-
+// debug flags
+#define USE_DISPLAY 0
+#define DEBUG 0
+#define TIMING 0
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
+#ifdef DEBUG
+#include <Preferences.h>
+#endif
 // my libraries
 #include "pindefs.h" // contains hardware specs and defined defaults
 // project
@@ -41,9 +47,6 @@
 #include <storage.h>
 #include <helpers.h>
 
-// debug flags
-#define DEBUG 0
-#define USE_DISPLAY 0
 
 // printf templates
 #define SLEEP_TEMPLATE "Going to sleep:\n - reporting interval: %ds \
@@ -89,6 +92,9 @@ Rockblock rockblock = Rockblock(
 systemState state;
 // Storage
 ScoutStorage storage = ScoutStorage();
+#ifdef DEBUG
+Preferences preferences;
+#endif
 
 /*
  * Keep functions that interact with ESP in main.cpp for now
@@ -172,7 +178,11 @@ void goToSleep(bool error=false) {
   strftime(bfr, 32, "%F %T", gmtime(&state.expected_wakeup));
   Serial.println(bfr);
   esp_sleep_enable_timer_wakeup( difference * 1E6 );
-  esp_deep_sleep_start();
+  try {
+    esp_deep_sleep_start();
+  } catch (...) {
+    Serial.println("Sleep failure.");
+  }
 }
 
 /*
@@ -197,7 +207,7 @@ void Task_blink(void *pvParamaters) {
       expander.digitalWrite(LED00, blink_state);
       xSemaphoreGive(mutex_i2c);
     }
-    // blink quickly before GPS fix, slowly when attampt sending
+    // blink quickly before GPS fix, slowly when attempt sending
     blink_state = !(ctr % (state.gps_done ? 15 : 3));
     ctr++;
     // Delay affects blink speed, intervals are multiples of that number
@@ -206,8 +216,7 @@ void Task_blink(void *pvParamaters) {
 }
 
 /*
- * DEBUG ONLY: Print state info to the LilyGO display.
- * Use mutex to protect I2C bus.
+ * DEBUG ONLY: Print state info to LilyGO display. Mutex to protect I2C bus.
  */
 void Task_display(void *pvParameters) {
   char out_string[44] = {0};
@@ -231,17 +240,17 @@ void Task_display(void *pvParameters) {
  */
 void Task_rockblock(void *pvParameters) {
   // Give it some time to be suspended
-  vTaskDelay( pdMS_TO_TICKS( 100 ) );
+  vTaskDelay( pdMS_TO_TICKS( 200 ) );
   Serial.println("Start radio loop");
   // Give some time for the peripherials to stabilize.
   // It might hang up if we start too early
-  vTaskDelay( pdMS_TO_TICKS( 100 ) );
+  vTaskDelay( pdMS_TO_TICKS( 200 ) );
   if (xSemaphoreTake(mutex_i2c, 100) == pdTRUE) {
     rockblock.toggle(true);
     xSemaphoreGive(mutex_i2c);
   }
   while (true) {
-    vTaskDelay( pdMS_TO_TICKS( 50 ) );
+    vTaskDelay( pdMS_TO_TICKS( 100 ) );
     rockblock.loop();
   }
 }
@@ -288,7 +297,6 @@ void Task_main_loop(void *pvParameters) {
   uint16_t ctr = 0;
 
   while (true) {
-
     // Check whether port expander is available by writing and reading to an
     // unused port.
     //
@@ -391,19 +399,30 @@ void Task_main_loop(void *pvParameters) {
 }
 
 /*
- * Hard timeout to recover a hangup system. Consider this a gentle watchdog
- * able to turn off peripherials. Hopefully this will never be triggered.
- * Graceful timeout will be handled by the main task.
+ * Hard timeout to recover a hangup system. Hopefully this will never be
+ * triggered. Graceful timeout will be handled by the main task.
  */
 void Task_timeout(void *pvParameters) {
   while (true) {
-    // Give it an extra 20 seconds so that we can catch timeout gracefully.
-    if ( getRunTime() > SYSTEM_TIME_OUT + 20 ) {
+    // Give it an extra 30 seconds so that we can catch timeout gracefully.
+    if ( getRunTime() > SYSTEM_TIME_OUT + 30 ) {
       char bfr[64] = {0};
-      snprintf(bfr, 64, "HARD TIMEOUT after %d seconds", SYSTEM_TIME_OUT + 20);
+      snprintf(bfr, 64, "HARD RESET after %d seconds", SYSTEM_TIME_OUT + 30);
       Serial.println(bfr);
-      goToSleep();
-      vTaskDelete(NULL);
+      // Not using the complicated sleep function here since it might
+      // have dependencies not met. Just reset and hope system runs successfully
+      // on the next try. This will trigger a turn on message on the user side
+
+#ifdef DEBUG
+    // Store the number of hard resets for debugging
+    preferences.begin("debug", false);
+    int resets = preferences.getInt("hard_resets");
+    resets++;
+    preferences.putInt("hard_resets", resets);
+    preferences.end();
+#endif
+
+      esp_restart();
     }
     // no hurry here
     vTaskDelay( pdMS_TO_TICKS( 5000 ) );
@@ -417,6 +436,8 @@ void setup() {
   // --- Go slow for power consumption since a 32bit system with 240Mhz is
   // --- overkill for this system that is mostly waiting around
   setCpuFrequencyMhz(10);
+  // Task to monitor the system, will reset the system if we not finish in time
+  xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10, NULL);
   // ---- Start Serial for debugging --------------
   Serial.begin(115200);
   // ----- Init both HardwareSerial channels ---------------------
@@ -444,6 +465,21 @@ void setup() {
   // ---- Read battery voltage --------------------
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);
+
+#ifdef DEBUG
+  preferences.begin("debug", false);
+  Serial.print("Restarts: ");
+  int restarts = preferences.getDouble("restarts", 0);
+  if ( state.first_run ) {
+    restarts++;
+  }
+  Serial.println(restarts);
+  preferences.putDouble("restarts", restarts);
+  Serial.print("Sleep failures: ");
+  Serial.println(preferences.getInt("hard_resets"));
+  preferences.end();
+#endif
+
   Serial.println();
   // ----- Init IO Expander -----------------------
   expander.init();
@@ -482,8 +518,7 @@ void setup() {
   // Don't run radio until needed
   vTaskSuspend(rockblockTaskHandle);
   xTaskCreate(&Task_main_loop, "Task main loop", 4096, NULL, 10, NULL);
-  xTaskCreate(&Task_timeout, "Task timeout", 4096, NULL, 10, NULL);
-#if DEBUG
+#if TIMING
   xTaskCreate(&Task_time, "Task time", 4096, NULL, 14, NULL);
 #endif
 #if USE_DISPLAY

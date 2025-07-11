@@ -20,8 +20,10 @@ void ScoutStorage::restore(systemState &state) {
         preferences.begin("scout", false);
         preferences.end();
         state.mode = FIRST;
+        state.first_run = true;
     } else {
         // restore other variables, there are non during the first run
+        state.first_run = false;
         state.start_time = rtc_start;
         state.expected_wakeup = rtc_expected_wakeup;
         state.interval = rtc_interval;

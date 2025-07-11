@@ -27,6 +27,7 @@ def get_cycles(
     :params int surface_max: Assumed minimum surface duration
     :return type list[tuple[float, float, str]]:
     """
+    random.seed()
     dive = random.random() > .5
     first = True
     time_pointer = 0
@@ -232,8 +233,8 @@ if __name__ == '__main__':
         '-o', '--surface_success_odds', type=float, default=.8,
         help='Odds of successful transmission while on surface (default=0.8)')
     parser.add_argument(
-        '-t', '--gps_timeout', type=int, default=5,
-        help='Timeout for GPS in minutes (default=5)')
+        '-t', '--gps_timeout', type=int, default=4,
+        help='Timeout for GPS in minutes (default=4)')
     parser.add_argument(
         '-p', '--process_time', type=int, default=2,
         help='Minimum process time for successful send in minutes (default=2)')

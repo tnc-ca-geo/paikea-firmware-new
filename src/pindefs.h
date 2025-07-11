@@ -66,13 +66,13 @@ ird_rts     1     7    0
 // retry after 10 mins if not successful
 #define RETRY_INTERVAL 600
 // time after which system is shutdown no matter what, 9 minutes
-#define SYSTEM_TIME_OUT 540
+#define SYSTEM_TIME_OUT 360
 // time before we decide that we won't get a GPS fix
-#define GPS_TIME_OUT 360
+#define GPS_TIME_OUT 240
 // Maximum regular reporting time, 86400s = 1day
 #define MAXIMUM_INTERVAL 86400  // IMPLEMENT
 // Mininmum sleep time, 5s
-#define MINIMUM_SLEEP 5
+#define MINIMUM_SLEEP 20
 // Maximum sleep time, 259200s = 3 days
 #define MAXIMUM_SLEEP 259200
 // Sleep time on system error

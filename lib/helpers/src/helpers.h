@@ -11,7 +11,7 @@
 #include <gps.h>
 
 #ifndef MINIMUM_SLEEP
-#define MINIMUM_SLEEP 5
+#define MINIMUM_SLEEP 20
 #endif
 #ifndef MAXIMUM_SLEEP
 #define MAXIMUM_SLEEP 259200
@@ -20,7 +20,7 @@
 #define RETRY_INTERVAL 600
 #endif
 #ifndef SYSTEM_TIME_OUT
-  #define SYSTEM_TIME_OUT 540
+  #define SYSTEM_TIME_OUT 360
 #endif
 
 namespace helpers {
