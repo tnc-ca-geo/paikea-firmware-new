@@ -413,7 +413,7 @@ void Task_timeout(void *pvParameters) {
       // have dependencies not met. Just reset and hope system runs successfully
       // on the next try. This will trigger a turn on message on the user side
 
-#ifdef DEBUG
+#if DEBUG
     // Store the number of hard resets for debugging
     preferences.begin("debug", false);
     int resets = preferences.getInt("hard_resets");
@@ -466,7 +466,7 @@ void setup() {
   state.bat = readBatteryVoltage();
   Serial.print("battery: "); Serial.println(state.bat);
 
-#ifdef DEBUG
+#if DEBUG
   preferences.begin("debug", false);
   Serial.print("Restarts: ");
   int restarts = preferences.getDouble("restarts", 0);
