@@ -98,9 +98,11 @@ Three fields have been added:
 
   - 0: normal message on schedule (on set schedule)
   - 1: first message after power on (immediately)
-  - 2: retry off schedule (on set +10, +20, + 30 minutes, new scheduled message will supersede this and end this sequence)
+  - 2: sleep wake up, sent after a sleep duration change was applied (the sleep configuration has been stored and the buoy wakes up on the new schedule)
   - 3: configuration change received and applied (immediately after receiving config change request, afterwards +10, +20, +30, or next successful scheduled message)
   - 4: error parsing incoming messages or requested config settings out of bound (immediately after receiving config change request, afterwards +10, +20, +30, or next successful scheduled message)
+
+  Retries do not have their own status value. A retry message carries the status of the message it retries.
 
 In addition to the status information, all messages will contain the full set of location information as well as the set schedule.
 
